@@ -31,6 +31,7 @@ func newAPIServer() *apiServer {
 
 func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/config", s.handleConfig)
+	mux.HandleFunc("GET /api/users", s.handleUsers)
 	mux.HandleFunc("GET /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/dry-run", s.handleDryRun)
 	mux.HandleFunc("POST /api/commit", s.handleCommit)
@@ -38,14 +39,15 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 
 // configRequest is the JSON body for POST /api/config.
 type configRequest struct {
-	MMDBPath  string   `json:"mmDbPath"`
-	NavDBPath string   `json:"navDbPath"`
-	ServerURL string   `json:"serverUrl"`
-	Username  string   `json:"username"`
-	Password  string   `json:"password"`
-	MMRoot    string   `json:"musicRoot"`
-	UserID    string   `json:"userId"`
-	Fields    []string `json:"fields"` // any of "rating", "playCount", "starred"
+	MMDBPath      string   `json:"mmDbPath"`
+	NavDBPath     string   `json:"navDbPath"`
+	ServerURL     string   `json:"serverUrl"`
+	Username      string   `json:"username"`
+	Password      string   `json:"password"`
+	MMRoot        string   `json:"musicRoot"`
+	UserID        string   `json:"userId"`
+	Fields        []string `json:"fields"` // any of "rating", "playCount", "starred"
+	StarThreshold int      `json:"starThreshold"` // 0-5; 0 means "use the default"
 }
 
 func fieldsFromNames(names []string) (model.Fields, error) {
@@ -77,14 +79,15 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := model.Config{
-		MMDBPath:  req.MMDBPath,
-		NavDBPath: req.NavDBPath,
-		ServerURL: req.ServerURL,
-		Username:  req.Username,
-		Password:  req.Password,
-		MMRoot:    req.MMRoot,
-		UserID:    req.UserID,
-		Fields:    fields,
+		MMDBPath:      req.MMDBPath,
+		NavDBPath:     req.NavDBPath,
+		ServerURL:     req.ServerURL,
+		Username:      req.Username,
+		Password:      req.Password,
+		MMRoot:        req.MMRoot,
+		UserID:        req.UserID,
+		Fields:        fields,
+		StarThreshold: model.Rating(req.StarThreshold),
 	}
 
 	source, err := mm.Open(cfg.MMDBPath)
@@ -127,6 +130,24 @@ func (s *apiServer) closeSourcesLocked() {
 	if s.navReader != nil {
 		s.navReader.Close()
 	}
+}
+
+// handleUsers lists Navidrome users so the UI can pick the one that owns the
+// annotations being migrated.
+func (s *apiServer) handleUsers(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	configured, navReader := s.configured, s.navReader
+	s.mu.Unlock()
+	if !configured {
+		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("not configured: POST /api/config first"))
+		return
+	}
+	users, err := navReader.Users()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, users)
 }
 
 // readOnlyPipeline builds a Pipeline suitable for Scan/DryRun (no writer).

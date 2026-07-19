@@ -3,9 +3,8 @@ package web
 
 import "embed"
 
-// FS is the embedded web UI. For now it is a single placeholder page.
-// TODO(sonnet): build the real UI (config form, scope picker, dry-run review,
-// commit) — add files under this directory and they embed automatically.
+// FS is the embedded web UI: config form -> user pick -> scope pick ->
+// scan/dry-run review -> commit, wired to the /api/* endpoints in app.js.
 //
-//go:embed index.html
+//go:embed index.html app.js style.css
 var FS embed.FS

@@ -4,13 +4,69 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MediaMonkey → Navidrome Migrate</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main>
     <h1>MediaMonkey&nbsp;5 → Navidrome Migrate</h1>
-    <p>Skeleton UI placeholder. The migration workflow (configure → pick scope →
-       scan → dry-run → commit) will live here.</p>
-    <!-- TODO(sonnet): wire this page to the /api/* endpoints. -->
+
+    <section id="step-config" class="step">
+      <h2>1. Configure</h2>
+      <form id="config-form">
+        <label>MM5.DB path <input name="mmDbPath" required placeholder="C:\...\MM5.DB" /></label>
+        <label>navidrome.db path <input name="navDbPath" required placeholder="C:\...\navidrome.db" /></label>
+        <label>Navidrome server URL <input name="serverUrl" required placeholder="http://localhost:4533" /></label>
+        <label>Username <input name="username" required /></label>
+        <label>Password <input name="password" type="password" required /></label>
+        <label>Shared music root (MM form, e.g. <code>:\My Music</code>)
+          <input name="musicRoot" required placeholder=":\My Music" />
+        </label>
+        <fieldset>
+          <legend>Fields to migrate</legend>
+          <label><input type="checkbox" name="fields" value="rating" checked /> Rating</label>
+          <label><input type="checkbox" name="fields" value="playCount" checked /> Play count &amp; last played</label>
+          <label><input type="checkbox" name="fields" value="starred" /> Starred (MM rating &ge; threshold)</label>
+        </fieldset>
+        <label>Star threshold (1&ndash;5)
+          <input name="starThreshold" type="number" min="1" max="5" value="5" />
+        </label>
+        <button type="submit">Connect</button>
+      </form>
+      <p id="config-error" class="error" hidden></p>
+    </section>
+
+    <section id="step-user" class="step" hidden>
+      <h2>2. Pick the Navidrome user</h2>
+      <p>Annotations (play count, rating, starred) are per-user.</p>
+      <select id="user-select"></select>
+      <button id="user-continue">Continue</button>
+    </section>
+
+    <section id="step-scope" class="step" hidden>
+      <h2>3. Pick a scope</h2>
+      <p>Limit to a subfolder under the shared root, or leave blank for the whole library.</p>
+      <label>Scope (relative path, optional)
+        <input id="scope-input" placeholder="artist/album" />
+      </label>
+      <button id="scan-btn">Scan</button>
+      <div id="scan-summary"></div>
+    </section>
+
+    <section id="step-review" class="step" hidden>
+      <h2>4. Dry-run review</h2>
+      <div id="dryrun-summary"></div>
+      <table id="dryrun-table" hidden>
+        <thead>
+          <tr><th>Path</th><th>Rating</th><th>Play count</th><th>Last played</th><th>Starred</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button id="commit-btn">Commit this scope</button>
+      <p id="commit-result"></p>
+    </section>
+
+    <p id="global-error" class="error" hidden></p>
   </main>
+  <script src="app.js"></script>
 </body>
 </html>

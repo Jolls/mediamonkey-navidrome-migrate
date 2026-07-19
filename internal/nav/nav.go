@@ -5,12 +5,17 @@
 package nav
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	_ "modernc.org/sqlite"
+
+	"github.com/jolls/mm5-navidrome-migrate/internal/match"
 	"github.com/jolls/mm5-navidrome-migrate/internal/model"
 )
 
@@ -47,35 +52,129 @@ type AnnotationWriter interface {
 	Close() error
 }
 
+type sqliteReader struct {
+	db *sql.DB
+}
+
 // OpenReader opens navidrome.db read-only.
-//
-// TODO(sonnet): implement with modernc.org/sqlite (read-only DSN). ReadTracks
-// selects id, path, mbz_recording_id from media_file (skip missing=1) and
-// normalizes path with match.Normalize (path is already library-relative — do
-// NOT strip a root). Users selects id, user_name from the user table.
-func OpenReader(path string) (Reader, error) { return nil, ErrNotImplemented }
+func OpenReader(path string) (Reader, error) {
+	dsn := fmt.Sprintf("file:%s?mode=ro&immutable=1", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &sqliteReader{db: db}, nil
+}
+
+func (r *sqliteReader) Close() error { return r.db.Close() }
+
+func (r *sqliteReader) ReadTracks() ([]model.NavTrack, error) {
+	rows, err := r.db.Query(`SELECT id, path, mbz_recording_id FROM media_file WHERE COALESCE(missing,0)=0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tracks []model.NavTrack
+	for rows.Next() {
+		var (
+			id   string
+			path string
+			mbid sql.NullString
+		)
+		if err := rows.Scan(&id, &path, &mbid); err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, model.NavTrack{
+			ID:      id,
+			RelPath: match.Normalize(path),
+			MBID:    mbid.String,
+		})
+	}
+	return tracks, rows.Err()
+}
+
+func (r *sqliteReader) Users() ([]User, error) {
+	rows, err := r.db.Query(`SELECT id, user_name FROM user`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+type sqliteWriter struct {
+	db *sql.DB
+}
 
 // OpenWriter opens navidrome.db read-write for annotation upserts. Callers MUST
 // have already run EnsureUnlocked and Backup.
-//
-// TODO(sonnet): implement. Upsert keyed by (user_id, item_id,
-// item_type='media_file'):
-//
-//	INSERT INTO annotation (user_id,item_id,item_type,play_count,play_date)
-//	VALUES (?,?, 'media_file', ?, ?)
-//	ON CONFLICT(user_id,item_id,item_type)
-//	DO UPDATE SET play_count=excluded.play_count, play_date=excluded.play_date;
-//
-// Only touch play_count/play_date so a rating/starred set via the API (same
-// row) is preserved. play_date is nullable — pass NULL when LastPlayed is zero.
-func OpenWriter(path string) (AnnotationWriter, error) { return nil, ErrNotImplemented }
+func OpenWriter(path string) (AnnotationWriter, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &sqliteWriter{db: db}, nil
+}
+
+func (w *sqliteWriter) Close() error { return w.db.Close() }
+
+// SetAnnotation upserts (userID, a.NavID)'s play_count/play_date, touching only
+// those two columns so an API-set rating/starred on the same row survives.
+func (w *sqliteWriter) SetAnnotation(userID string, a Annotation) error {
+	var playDate any
+	if !a.LastPlayed.IsZero() {
+		playDate = a.LastPlayed.UTC()
+	}
+	_, err := w.db.Exec(`
+		INSERT INTO annotation (user_id, item_id, item_type, play_count, play_date)
+		VALUES (?, ?, 'media_file', ?, ?)
+		ON CONFLICT(user_id, item_id, item_type)
+		DO UPDATE SET play_count=excluded.play_count, play_date=excluded.play_date
+	`, userID, a.NavID, a.PlayCount, playDate)
+	return err
+}
 
 // EnsureUnlocked returns an error if Navidrome appears to be running against
 // dbPath. Direct writes must never race a live server.
-//
-// TODO(sonnet): implement a real liveness/lock check (e.g. attempt an exclusive
-// lock, or inspect the -wal/-shm sidecar files).
-func EnsureUnlocked(dbPath string) error { return ErrNotImplemented }
+func EnsureUnlocked(dbPath string) error {
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(0)", dbPath)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
+		return fmt.Errorf("navidrome.db appears to be in use (is Navidrome running?): %w", err)
+	}
+	_, _ = conn.ExecContext(ctx, "COMMIT")
+	return nil
+}
 
 // Backup copies dbPath to a timestamped sibling and returns the backup path.
 // Always call this before the first direct write.
