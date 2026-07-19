@@ -43,7 +43,7 @@ type configRequest struct {
 	ServerURL string   `json:"serverUrl"`
 	Username  string   `json:"username"`
 	Password  string   `json:"password"`
-	MusicRoot string   `json:"musicRoot"`
+	MMRoot    string   `json:"musicRoot"`
 	UserID    string   `json:"userId"`
 	Fields    []string `json:"fields"` // any of "rating", "playCount", "starred"
 }
@@ -82,7 +82,7 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		ServerURL: req.ServerURL,
 		Username:  req.Username,
 		Password:  req.Password,
-		MusicRoot: req.MusicRoot,
+		MMRoot:    req.MMRoot,
 		UserID:    req.UserID,
 		Fields:    fields,
 	}

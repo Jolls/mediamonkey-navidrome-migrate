@@ -3,9 +3,14 @@
 package mm
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
+	_ "modernc.org/sqlite"
+
+	"github.com/jolls/mm5-navidrome-migrate/internal/match"
 	"github.com/jolls/mm5-navidrome-migrate/internal/model"
 )
 
@@ -20,22 +25,67 @@ type Source interface {
 	Close() error
 }
 
+type sqliteSource struct {
+	db *sql.DB
+}
+
 // Open opens MM5.DB read-only.
-//
-// TODO(sonnet): open with modernc.org/sqlite using a read-only DSN, e.g.
-// "file:<path>?mode=ro&immutable=1", and return a concrete Source. ReadTracks:
-//
-//	SELECT SongPath, Rating, PlayCounter, LastTimePlayed FROM Songs
-//
-//   - RelPath: match.NormalizeRel(SongPath, root). NB: MM blanks the drive
-//     letter, so SongPath looks like ":\My Music\Artist\...". The chosen root
-//     is in that same stored form (e.g. ":\My Music"). Drop rows not under root.
-//   - Rating: FromMMRating (Rating is 0-100; -1/NULL = unrated).
-//   - LastPlayed: FromMMDate(LastTimePlayed) (0 => never / zero Time).
-//   - MBID: leave "" — MM5 has no MBID column (it hides in ExtendedTags);
-//     relative-path matching carries the load. (Future: parse ExtendedTags.)
 func Open(path string) (Source, error) {
-	return nil, ErrNotImplemented
+	dsn := fmt.Sprintf("file:%s?mode=ro&immutable=1", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &sqliteSource{db: db}, nil
+}
+
+func (s *sqliteSource) Close() error { return s.db.Close() }
+
+func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
+	rows, err := s.db.Query(`SELECT SongPath, Rating, PlayCounter, LastTimePlayed FROM Songs`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tracks []model.Track
+	for rows.Next() {
+		var (
+			songPath   sql.NullString
+			rating     sql.NullInt64
+			playCount  int
+			lastPlayed float64
+		)
+		if err := rows.Scan(&songPath, &rating, &playCount, &lastPlayed); err != nil {
+			return nil, err
+		}
+		if !songPath.Valid {
+			continue
+		}
+
+		rel, ok := match.NormalizeRel(songPath.String, root)
+		if !ok {
+			continue
+		}
+
+		mmRating := -1
+		if rating.Valid {
+			mmRating = int(rating.Int64)
+		}
+
+		tracks = append(tracks, model.Track{
+			RelPath:    rel,
+			OrigPath:   songPath.String,
+			Rating:     FromMMRating(mmRating),
+			PlayCount:  playCount,
+			LastPlayed: FromMMDate(lastPlayed),
+		})
+	}
+	return tracks, rows.Err()
 }
 
 // mmEpoch is MediaMonkey's TDateTime epoch: float day 0 == 1899-12-30.
