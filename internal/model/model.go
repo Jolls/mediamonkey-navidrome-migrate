@@ -72,8 +72,9 @@ type Config struct {
 	ServerURL string
 	Username  string
 	Password  string
-	MusicRoot string // the single shared root both libraries point at
-	UserID    string // Navidrome user that owns the annotations
+	MMRoot    string // absolute root MM's SongPaths live under, on this machine.
+	// Navidrome needs no root here: media_file.path is already library-relative.
+	UserID string // Navidrome user that owns the annotations
 	Fields    Fields
 }
 

@@ -20,17 +20,24 @@
 | Playlists | Phase 2 | Native `.m3u` auto-import already covers this |
 
 ## 4. Track matching
-- User selects **one shared music root folder**.
-- Read-only from `navidrome.db` → `media_file(id, path)`; read `MM5.DB` → `Songs(SongPath, ...)`.
-- Compute **path relative to shared root** on both sides; match on that.
+- Matching key = normalized (lowercase, forward-slash) **library-relative path**.
+- **Navidrome side:** `media_file.path` is *already* library-relative (verified against a real DB) → just normalize; **do not strip a root**. Library root lives in the separate `library` table.
+- **MM side:** `Songs.SongPath` is an absolute Windows path → user picks the **MM music root**; strip it to get the relative key.
+- The two align because both libraries point at the same files, so the sub-tree under each root is identical.
 - Fallback signal: MusicBrainz recording ID (`mbz_recording_id`) when present.
 - Output: matched / ambiguous / unmatched buckets for UI review + dry-run.
 
 ## 5. Data sources
-- **MM5.DB** (read-only): `Songs` — `SongPath`, `Rating` (0–100), `PlayCounter`, `LastTimePlayed`.
-- **navidrome.db**:
-  - read-only: `media_file(id, path, mbz_recording_id)`, `user(id, user_name)`.
-  - read-write: `annotation(user_id, item_id, item_type='media_file', play_count, play_date, rating, starred, starred_at)`.
+- **MM5.DB** (read-only, schema verified): `Songs` — `SongPath`, `Rating`, `PlayCounter`, `LastTimePlayed`.
+  - `SongPath`: absolute Windows path with the **drive letter blanked** (`:\My Music\Artist\...`); the root chosen for stripping is in this stored form.
+  - `Rating`: 0–100, `-1`/NULL = unrated (`mm.FromMMRating`).
+  - `LastTimePlayed`/`DateAdded`: **TDateTime float** = days since 1899-12-30, `0` = never (`mm.FromMMDate`). Not Unix time.
+  - No MBID column (buried in `ExtendedTags`) → MM-side MBID matching deferred.
+  - `Played(IDSong, PlayDate, UTCOffset)`: per-play history — future source for backdated per-scrobble fidelity.
+- **navidrome.db** (schema verified against a real DB):
+  - read-only: `media_file(id, path [library-relative], mbz_recording_id, missing)`, `user(id, user_name)`, `library(id, path)`.
+  - read-write: `annotation(user_id, item_id, item_type='media_file', play_count, play_date, rating, starred, starred_at, rated_at)`. PK = `(user_id, item_id, item_type)`.
+  - Play-count upsert touches **only** `play_count`/`play_date` so an API-set `rating`/`starred` on the same row survives.
 
 ## 6. Config (collected in UI)
 - Navidrome server URL + username/password (Subsonic API).
@@ -68,8 +75,15 @@
 /web              embedded frontend
 ```
 
-## 10. Open items
-- Confirm Navidrome `media_file.path` is absolute vs library-relative (affects root-strip logic).
+## 10. Fixtures & test data (local, git-ignored under `/local/`)
+- `local/masters/` — pristine real DBs (`MM5.DB`, `navidrome.db`), chmod 444, never written.
+- `local/work/` — throwaway copies the app/tests point at.
+- `scripts/reset-fixtures.sh` — refresh `work/` from `masters/` before each run, so every dry-run/real-run starts clean. (`navidrome.db` is the only one we mutate.)
+- Real scale: ~20.3k MM songs vs ~20.3k Navidrome files — counts align, so a real dry-run is a meaningful matching test.
+
+## 11. Open items
+- ~~Confirm Navidrome `media_file.path` abs vs relative~~ → **library-relative** (resolved).
+- Multi-library: `media_file.library_id` + `library` table exist; single-library assumed for v1.
 - Rating granularity: half-stars unavoidably lost (Navidrome rating is 0–5 int).
 - Multi-user handling beyond a single target user (defer).
 ```

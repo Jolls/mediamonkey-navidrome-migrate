@@ -32,8 +32,9 @@ type Annotation struct {
 
 // Reader reads navidrome.db read-only (for matching and user selection).
 type Reader interface {
-	// ReadTracks returns media files with RelPath normalized against root.
-	ReadTracks(root string) ([]model.NavTrack, error)
+	// ReadTracks returns media files with RelPath = the normalized, already
+	// library-relative media_file.path (no external root needed).
+	ReadTracks() ([]model.NavTrack, error)
 	Users() ([]User, error)
 	Close() error
 }
@@ -49,15 +50,24 @@ type AnnotationWriter interface {
 // OpenReader opens navidrome.db read-only.
 //
 // TODO(sonnet): implement with modernc.org/sqlite (read-only DSN). ReadTracks
-// selects id, path, mbz_recording_id from media_file and normalizes path via
-// match.NormalizeRel against root; Users selects id, user_name from user.
+// selects id, path, mbz_recording_id from media_file (skip missing=1) and
+// normalizes path with match.Normalize (path is already library-relative — do
+// NOT strip a root). Users selects id, user_name from the user table.
 func OpenReader(path string) (Reader, error) { return nil, ErrNotImplemented }
 
 // OpenWriter opens navidrome.db read-write for annotation upserts. Callers MUST
 // have already run EnsureUnlocked and Backup.
 //
-// TODO(sonnet): implement. Upsert into the annotation table keyed by
-// (user_id, item_id, item_type='media_file'), setting play_count and play_date.
+// TODO(sonnet): implement. Upsert keyed by (user_id, item_id,
+// item_type='media_file'):
+//
+//	INSERT INTO annotation (user_id,item_id,item_type,play_count,play_date)
+//	VALUES (?,?, 'media_file', ?, ?)
+//	ON CONFLICT(user_id,item_id,item_type)
+//	DO UPDATE SET play_count=excluded.play_count, play_date=excluded.play_date;
+//
+// Only touch play_count/play_date so a rating/starred set via the API (same
+// row) is preserved. play_date is nullable — pass NULL when LastPlayed is zero.
 func OpenWriter(path string) (AnnotationWriter, error) { return nil, ErrNotImplemented }
 
 // EnsureUnlocked returns an error if Navidrome appears to be running against

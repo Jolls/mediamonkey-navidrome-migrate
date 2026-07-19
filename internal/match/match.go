@@ -15,8 +15,8 @@ import (
 // cross-platform comparison: forward slashes, lowercased, root prefix stripped.
 // ok is false when abs is not under root.
 func NormalizeRel(abs, root string) (rel string, ok bool) {
-	a := normalize(abs)
-	r := strings.TrimSuffix(normalize(root), "/")
+	a := Normalize(abs)
+	r := strings.TrimSuffix(Normalize(root), "/")
 	if r != "" && a != r && !strings.HasPrefix(a, r+"/") {
 		return "", false
 	}
@@ -24,8 +24,10 @@ func NormalizeRel(abs, root string) (rel string, ok bool) {
 	return rel, true
 }
 
-// normalize converts any OS path to lowercase, forward-slash, cleaned form.
-func normalize(p string) string {
+// Normalize converts any OS path to lowercase, forward-slash, cleaned form.
+// Use this for Navidrome's media_file.path, which is already library-relative
+// and must not have a root stripped.
+func Normalize(p string) string {
 	p = strings.ReplaceAll(p, "\\", "/")
 	return strings.ToLower(path.Clean(p))
 }

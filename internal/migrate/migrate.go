@@ -26,11 +26,11 @@ type Pipeline struct {
 
 // Scan reads both libraries and matches every source track within scope.
 func (p *Pipeline) Scan(scope model.Scope) ([]model.Match, error) {
-	src, err := p.Source.ReadTracks(p.Cfg.MusicRoot)
+	src, err := p.Source.ReadTracks(p.Cfg.MMRoot)
 	if err != nil {
 		return nil, err
 	}
-	navTracks, err := p.NavDB.ReadTracks(p.Cfg.MusicRoot)
+	navTracks, err := p.NavDB.ReadTracks()
 	if err != nil {
 		return nil, err
 	}
