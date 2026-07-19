@@ -101,9 +101,11 @@ func (p *Pipeline) change(m model.Match) model.Change {
 		c.PlayCount, c.LastPlayed = &pc, &lp
 	}
 	if f.Has(model.FieldStarred) {
-		// TODO(sonnet): make the star mapping configurable; MM has no true
-		// "favorite", so treat a max rating as starred by default.
-		s := m.Source.Rating >= 5
+		threshold := p.Cfg.StarThreshold
+		if threshold == 0 {
+			threshold = model.DefaultStarThreshold
+		}
+		s := m.Source.Rating >= threshold
 		c.Starred = &s
 	}
 	return c

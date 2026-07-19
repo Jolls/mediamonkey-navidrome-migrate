@@ -76,7 +76,16 @@ type Config struct {
 	// Navidrome needs no root here: media_file.path is already library-relative.
 	UserID string // Navidrome user that owns the annotations
 	Fields    Fields
+
+	// StarThreshold is the minimum MM rating (0-5) treated as "starred" when
+	// FieldStarred is set. MM has no true favorite flag, so this maps its
+	// rating scale onto Navidrome's boolean star. Zero means "unset"; callers
+	// should default it to 5 (DefaultStarThreshold).
+	StarThreshold Rating
 }
+
+// DefaultStarThreshold is the StarThreshold used when a Config leaves it unset.
+const DefaultStarThreshold Rating = 5
 
 // Change is one track's intended write, as shown in a dry-run. A nil pointer
 // means "leave this field untouched".
