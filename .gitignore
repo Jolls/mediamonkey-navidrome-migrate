@@ -1,0 +1,17 @@
+# Binaries
+/app
+/app.exe
+*.exe
+
+# Test / build artifacts
+*.out
+/dist/
+
+# Local DBs and backups (never commit user data)
+*.db
+*.db-wal
+*.db-shm
+*.backup-*
+
+# Local working directory (never commit user data)
+/local/
