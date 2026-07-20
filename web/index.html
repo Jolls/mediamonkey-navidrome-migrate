@@ -11,6 +11,12 @@
     <h1>MediaMonkey&nbsp;5 → Navidrome Migrate</h1>
     <button id="quit-btn" type="button">Quit</button>
 
+    <nav class="mode-switch">
+      <button type="button" id="mode-migrate-btn" class="mode-btn" aria-pressed="true">Migrate to Navidrome</button>
+      <button type="button" id="mode-history-btn" class="mode-btn" aria-pressed="false">Play History</button>
+    </nav>
+
+    <div id="mode-migrate">
     <section id="step-config" class="step">
       <h2>1. Configure</h2>
       <form id="config-form">
@@ -91,6 +97,63 @@
     </section>
 
     <p id="global-error" class="error" hidden></p>
+    </div>
+
+    <div id="mode-history" hidden>
+      <section class="step">
+        <h2>Load MediaMonkey play history</h2>
+        <p>Independent of the Navidrome migration above &mdash; only needs MM5.DB. MediaMonkey has no UI of its own to browse this data.</p>
+        <form id="history-open-form">
+          <label>MM5.DB path
+            <span class="path-row">
+              <input name="historyMmDbPath" required placeholder="C:\...\MM5.DB" />
+              <button type="button" class="browse-btn" data-target="historyMmDbPath" data-label="Select MM5.DB">Browse&hellip;</button>
+            </span>
+          </label>
+          <label>ListenBrainz user token (optional &mdash; only needed to submit listens)
+            <input name="listenBrainzToken" type="password" placeholder="from listenbrainz.org/settings" />
+          </label>
+          <button type="submit">Load</button>
+        </form>
+        <p id="history-open-error" class="error" hidden></p>
+      </section>
+
+      <section id="history-table-section" class="step" hidden>
+        <h2>Play history</h2>
+        <label>Search
+          <input id="history-search" placeholder="artist, title, album, or path" />
+        </label>
+        <table id="history-table">
+          <thead>
+            <tr><th>Played at</th><th>Artist</th><th>Title</th><th>Album</th><th>Path</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="pagination">
+          <button id="history-prev-btn" type="button">&larr; Prev</button>
+          <span id="history-page-info"></span>
+          <button id="history-next-btn" type="button">Next &rarr;</button>
+        </div>
+      </section>
+
+      <section id="history-lb-section" class="step" hidden>
+        <h2>Submit to ListenBrainz</h2>
+        <p>This is a one-time backfill of MediaMonkey's historical plays. Going forward, point Navidrome's own built-in ListenBrainz scrobbling at the same account &mdash; this tool doesn't keep syncing new plays.</p>
+        <button id="history-lb-preview-btn" type="button">Preview</button>
+        <div id="history-lb-preview"></div>
+        <fieldset>
+          <legend>Test batch (verify it works before submitting everything)</legend>
+          <label>Number of most recent plays
+            <input id="history-lb-test-count" type="number" min="1" value="5" />
+          </label>
+          <button id="history-lb-test-btn" type="button">Submit test batch</button>
+        </fieldset>
+        <button id="history-lb-submit-btn" type="button">Submit all listens</button>
+        <p id="history-lb-result"></p>
+      </section>
+
+      <p id="history-error" class="error" hidden></p>
+    </div>
   </main>
   <script src="app.js"></script>
 </body>

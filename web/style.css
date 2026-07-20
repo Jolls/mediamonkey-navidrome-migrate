@@ -87,3 +87,24 @@ th, td {
   display: inline-block;
   margin-right: 1.5rem;
 }
+
+.mode-switch {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.mode-btn[aria-pressed="true"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+body.history-mode {
+  max-width: 70rem;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
