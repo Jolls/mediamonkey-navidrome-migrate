@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/jolls/mm5-navidrome-migrate/internal/migrate"
@@ -37,6 +38,16 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/dry-run", s.handleDryRun)
 	mux.HandleFunc("POST /api/commit", s.handleCommit)
 	mux.HandleFunc("GET /api/browse-file", s.handleBrowseFile)
+	mux.HandleFunc("POST /api/quit", s.handleQuit)
+}
+
+// handleQuit responds then terminates the process, letting the user close
+// the app from the UI instead of switching back to the terminal.
+func (s *apiServer) handleQuit(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
+	go func() {
+		os.Exit(0)
+	}()
 }
 
 // configRequest is the JSON body for POST /api/config.
