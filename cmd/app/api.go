@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
@@ -35,6 +36,7 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/dry-run", s.handleDryRun)
 	mux.HandleFunc("POST /api/commit", s.handleCommit)
+	mux.HandleFunc("GET /api/browse-file", s.handleBrowseFile)
 }
 
 // configRequest is the JSON body for POST /api/config.
@@ -75,6 +77,7 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	fields, err := fieldsFromNames(req.Fields)
 	if err != nil {
+		log.Printf("config: bad fields: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -90,19 +93,25 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		StarThreshold: model.Rating(req.StarThreshold),
 	}
 
+	log.Printf("config: opening MM5.DB at %q", cfg.MMDBPath)
 	source, err := mm.Open(cfg.MMDBPath)
 	if err != nil {
+		log.Printf("config: open MM5.DB failed: %v", err)
 		writeError(w, http.StatusBadGateway, fmt.Errorf("open MM5.DB: %w", err))
 		return
 	}
+	log.Printf("config: opening navidrome.db at %q", cfg.NavDBPath)
 	navReader, err := nav.OpenReader(cfg.NavDBPath)
 	if err != nil {
+		log.Printf("config: open navidrome.db failed: %v", err)
 		source.Close()
 		writeError(w, http.StatusBadGateway, fmt.Errorf("open navidrome.db: %w", err))
 		return
 	}
+	log.Printf("config: pinging navidrome server at %q as %q", cfg.ServerURL, cfg.Username)
 	client := subsonic.New(cfg.ServerURL, cfg.Username, cfg.Password)
 	if err := client.Ping(); err != nil {
+		log.Printf("config: ping navidrome server failed: %v", err)
 		source.Close()
 		navReader.Close()
 		writeError(w, http.StatusBadGateway, fmt.Errorf("ping navidrome server: %w", err))
@@ -118,6 +127,7 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	s.configured = true
 	s.mu.Unlock()
 
+	log.Printf("config: ok, sources open and server reachable")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -144,9 +154,11 @@ func (s *apiServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := navReader.Users()
 	if err != nil {
+		log.Printf("users: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	log.Printf("users: found %d navidrome user(s)", len(users))
 	writeJSON(w, http.StatusOK, users)
 }
 
@@ -176,11 +188,15 @@ func (s *apiServer) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusPreconditionRequired, err)
 		return
 	}
-	matches, err := p.Scan(scopeFromQuery(r))
+	scope := scopeFromQuery(r)
+	log.Printf("scan: scope dir=%q", scope.Dir)
+	matches, err := p.Scan(scope)
 	if err != nil {
+		log.Printf("scan: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	log.Printf("scan: %d match(es)", len(matches))
 	writeJSON(w, http.StatusOK, matches)
 }
 
@@ -190,11 +206,15 @@ func (s *apiServer) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusPreconditionRequired, err)
 		return
 	}
-	rep, err := p.DryRun(scopeFromQuery(r))
+	scope := scopeFromQuery(r)
+	log.Printf("dry-run: scope dir=%q", scope.Dir)
+	rep, err := p.DryRun(scope)
 	if err != nil {
+		log.Printf("dry-run: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	log.Printf("dry-run: matched=%d ambiguous=%d unmatched=%d changes=%d", rep.Matched, rep.Ambiguous, rep.Unmatched, len(rep.Changes))
 	writeJSON(w, http.StatusOK, rep)
 }
 
@@ -226,17 +246,22 @@ func (s *apiServer) handleCommit(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
 
+	log.Printf("commit: scope dir=%q", req.Dir)
 	if err := nav.EnsureUnlocked(cfg.NavDBPath); err != nil {
+		log.Printf("commit: navidrome.db locked: %v", err)
 		writeError(w, http.StatusConflict, fmt.Errorf("navidrome.db is in use: %w", err))
 		return
 	}
 	backupPath, err := nav.Backup(cfg.NavDBPath)
 	if err != nil {
+		log.Printf("commit: backup failed: %v", err)
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("backup navidrome.db: %w", err))
 		return
 	}
+	log.Printf("commit: backed up navidrome.db to %q", backupPath)
 	writer, err := nav.OpenWriter(cfg.NavDBPath)
 	if err != nil {
+		log.Printf("commit: open navidrome.db for writing failed: %v", err)
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("open navidrome.db for writing: %w", err))
 		return
 	}
@@ -251,9 +276,11 @@ func (s *apiServer) handleCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := p.Commit(model.Scope{Dir: req.Dir})
 	if err != nil {
+		log.Printf("commit: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	log.Printf("commit: applied=%d errors=%d", res.Applied, len(res.Errors))
 	writeJSON(w, http.StatusOK, commitResponse{BackupPath: backupPath, Result: res})
 }
 

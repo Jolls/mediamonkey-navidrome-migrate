@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Browse buttons next to the `MM5.DB` and `navidrome.db` path fields in the
+  config step, backed by a new `GET /api/browse-file` endpoint that opens a
+  native Windows file-picker dialog.
+- Terminal logging for the config/users/scan/dry-run/commit steps and for
+  every incoming HTTP request, so progress is visible while the app runs.
+- Back button on the dry-run review step to return to the scope-pick step.
+- `scripts/build.ps1` / `scripts/build.sh` to build the app into
+  `bin/migrate.exe`.
+
 ## [0.1.0] - 2026-07-19
 
 Initial working version: a local web app that migrates ratings, play counts,

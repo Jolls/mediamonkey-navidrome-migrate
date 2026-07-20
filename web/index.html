@@ -13,8 +13,18 @@
     <section id="step-config" class="step">
       <h2>1. Configure</h2>
       <form id="config-form">
-        <label>MM5.DB path <input name="mmDbPath" required placeholder="C:\...\MM5.DB" /></label>
-        <label>navidrome.db path <input name="navDbPath" required placeholder="C:\...\navidrome.db" /></label>
+        <label>MM5.DB path
+          <span class="path-row">
+            <input name="mmDbPath" required placeholder="C:\...\MM5.DB" />
+            <button type="button" class="browse-btn" data-target="mmDbPath" data-label="Select MM5.DB">Browse&hellip;</button>
+          </span>
+        </label>
+        <label>navidrome.db path
+          <span class="path-row">
+            <input name="navDbPath" required placeholder="C:\...\navidrome.db" />
+            <button type="button" class="browse-btn" data-target="navDbPath" data-label="Select navidrome.db">Browse&hellip;</button>
+          </span>
+        </label>
         <label>Navidrome server URL <input name="serverUrl" required placeholder="http://localhost:4533" /></label>
         <label>Username <input name="username" required /></label>
         <label>Password <input name="password" type="password" required /></label>
@@ -54,6 +64,7 @@
 
     <section id="step-review" class="step" hidden>
       <h2>4. Dry-run review</h2>
+      <button id="review-back-btn" type="button">&larr; Back</button>
       <div id="dryrun-summary"></div>
       <table id="dryrun-table" hidden>
         <thead>

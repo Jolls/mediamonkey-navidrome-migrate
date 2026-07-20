@@ -53,6 +53,25 @@ function configBody(form, extra) {
   };
 }
 
+for (const btn of document.querySelectorAll(".browse-btn")) {
+  btn.addEventListener("click", async () => {
+    hideError($("config-error"));
+    const input = document.querySelector(`[name="${btn.dataset.target}"]`);
+    const label = btn.dataset.label || "Select file";
+    btn.disabled = true;
+    try {
+      const res = await api("GET", `/api/browse-file?label=${encodeURIComponent(label)}`);
+      if (res.path) {
+        input.value = res.path;
+      }
+    } catch (err) {
+      showError($("config-error"), err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 $("config-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   hideError($("config-error"));
@@ -137,6 +156,11 @@ async function runDryRun(dir) {
 
   $("commit-btn").dataset.dir = dir;
 }
+
+$("review-back-btn").addEventListener("click", () => {
+  hideError($("global-error"));
+  showStep("step-scope");
+});
 
 function escapeHTML(s) {
   const div = document.createElement("div");

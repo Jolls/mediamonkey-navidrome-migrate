@@ -29,10 +29,21 @@ func main() {
 	log.Printf("serving on %s", url)
 	if err := openBrowser(url); err != nil {
 		log.Printf("open %s manually (%v)", url, err)
+	} else {
+		log.Printf("opened browser at %s", url)
 	}
-	if err := http.Serve(ln, mux); err != nil {
+	if err := http.Serve(ln, logRequests(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// logRequests logs each incoming HTTP request to the terminal so the user
+// can see the app is receiving traffic.
+func logRequests(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s", r.Method, r.URL.RequestURI())
+		h.ServeHTTP(w, r)
+	})
 }
 
 // openBrowser opens url in the default browser on Windows and Linux.
