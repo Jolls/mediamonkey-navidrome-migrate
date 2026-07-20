@@ -72,6 +72,7 @@
 /internal/subsonic Subsonic API client (setRating, star)
 /internal/match   matching strategies + scoring
 /internal/api     JSON handlers (scan, preview, dry-run, commit)
+/internal/listenbrainz  ListenBrainz submit-listens client (§11, independent of the pipeline above)
 /web              embedded frontend
 ```
 
@@ -81,7 +82,15 @@
 - `scripts/reset-fixtures.sh` — refresh `work/` from `masters/` before each run, so every dry-run/real-run starts clean. (`navidrome.db` is the only one we mutate.)
 - Real scale: ~20.3k MM songs vs ~20.3k Navidrome files — counts align, so a real dry-run is a meaningful matching test.
 
-## 11. Open items
+## 11. Play History view + ListenBrainz backfill (independent path)
+- **Not part of the pipeline above.** MediaMonkey's `Played(IDSong, PlayDate, UTCOffset)` table (per-play history) has no Navidrome equivalent — `annotation.play_date` only stores the single most recent play — and MediaMonkey itself has no UI to browse it. This path needs only `MM5.DB`: no music root, no Navidrome server/db, no scope.
+- **Timestamps are real UTC instants**, unlike `Songs.LastTimePlayed`: `Played.UTCOffset` carries a genuine per-row offset (days, local-minus-UTC), so `UTC = mmEpoch + PlayDate - UTCOffset` (`mm.FromMMPlayDate`). `Songs.Artist/SongTitle/Album` cover display metadata directly — no join to `Artists`/`ArtistsSongs` needed.
+- **Play History view**: a read-only, searchable/paginated table (`/api/history/plays`) — also doubles as a preview of what ListenBrainz submission would send.
+- **ListenBrainz submission**: `POST https://api.listenbrainz.org/1/submit-listens` (`internal/listenbrainz`), `Authorization: Token <user token>`, `listen_type: "import"`, batched to ≤1000 listens/request. Direct API, not a CSV/file import — matches how ListenBrainz's own importers and third-party tools (e.g. `juho05/export-to-listenbrainz`, which also reads from Navidrome) work under the hood. Track metadata is text-only for v1 (artist/track/release name); no MusicBrainz `recording_mbid` (would require parsing `Songs.ExtendedTags`, deferred).
+- **Idempotency**: ListenBrainz dedups server-side by (timestamp, track name, user), so re-submitting the same export is safe in the common case — a best-effort guarantee, not a hard one, so the UI offers a small test-batch submit (N most recent plays) to verify against a real account before trusting it with the full run, rather than a silent full resubmission.
+- **This is a one-time backfill**, not live scrobbling. Navidrome has its own native forward-looking ListenBrainz integration (point it at the same account, configured in Navidrome itself) for everything from the migration point onward — this tool doesn't attempt to keep syncing new plays.
+
+## 12. Open items
 - ~~Confirm Navidrome `media_file.path` abs vs relative~~ → **library-relative** (resolved).
 - Multi-library: `media_file.library_id` + `library` table exist; single-library assumed for v1.
 - Rating granularity: half-stars unavoidably lost (Navidrome rating is 0–5 int).

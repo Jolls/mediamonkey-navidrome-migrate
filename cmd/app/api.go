@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/jolls/mm5-navidrome-migrate/internal/listenbrainz"
 	"github.com/jolls/mm5-navidrome-migrate/internal/migrate"
 	"github.com/jolls/mm5-navidrome-migrate/internal/mm"
 	"github.com/jolls/mm5-navidrome-migrate/internal/model"
@@ -25,6 +26,14 @@ type apiServer struct {
 	source     mm.Source
 	navReader  nav.Reader
 	client     *subsonic.Client
+
+	// Play History / ListenBrainz state — independent of the fields above:
+	// this needs only MM5.DB (and, for submission, a LB token), not a
+	// Navidrome server/db or the main config flow.
+	historyOpen   bool
+	historySource mm.Source
+	historyPlays  []model.Play // cached on open; ~28k rows is trivial in memory
+	lbClient      *listenbrainz.Client
 }
 
 func newAPIServer() *apiServer {
@@ -39,6 +48,11 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/commit", s.handleCommit)
 	mux.HandleFunc("GET /api/browse-file", s.handleBrowseFile)
 	mux.HandleFunc("POST /api/quit", s.handleQuit)
+
+	mux.HandleFunc("POST /api/history/open", s.handleHistoryOpen)
+	mux.HandleFunc("GET /api/history/plays", s.handleHistoryPlays)
+	mux.HandleFunc("GET /api/history/listenbrainz/preview", s.handleListenBrainzPreview)
+	mux.HandleFunc("POST /api/history/listenbrainz/submit", s.handleListenBrainzSubmit)
 }
 
 // handleQuit responds then terminates the process, letting the user close

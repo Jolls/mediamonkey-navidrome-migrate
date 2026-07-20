@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-07-20
+
+### Added
+- New "Play History" view, independent of the Navidrome migration wizard
+  (only needs `MM5.DB`): a searchable, paginated table of every play in
+  MediaMonkey's `Played` log, which MediaMonkey itself has no UI to browse.
+- One-time backfill of that play history into
+  [ListenBrainz](https://listenbrainz.org) (`internal/listenbrainz`), given a
+  ListenBrainz user token — submitted directly via ListenBrainz's
+  `submit-listens` API in backdated batches, with a small test-batch submit
+  to verify against a real account before sending the full history.
+
 ## [0.1.6] - 2026-07-20
 
 ### Added

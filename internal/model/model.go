@@ -19,6 +19,18 @@ type Track struct {
 	MBID       string    // MusicBrainz recording id; "" when absent
 }
 
+// Play is one MediaMonkey play-history entry (from the Played table),
+// denormalized for display and ListenBrainz export. Independent of the
+// Navidrome matching pipeline — Path is raw and unnormalized, for display only.
+type Play struct {
+	SongID   int64
+	Path     string // raw MM SongPath, display only
+	Artist   string
+	Title    string
+	Album    string
+	PlayedAt time.Time // real UTC instant: see mm.FromMMPlayDate
+}
+
 // NavTrack is a Navidrome media_file, reduced to what matching needs.
 type NavTrack struct {
 	ID      string // media_file.id — the stable id the Subsonic API uses

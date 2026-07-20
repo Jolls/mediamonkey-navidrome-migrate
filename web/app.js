@@ -8,7 +8,9 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function showStep(id) {
-  for (const el of document.querySelectorAll(".step")) {
+  // Scoped to the migrate wizard only — the Play History mode has its own
+  // .step-classed sections with unrelated visibility state.
+  for (const el of document.querySelectorAll("#mode-migrate .step")) {
     el.hidden = el.id !== id;
   }
 }
@@ -269,3 +271,156 @@ $("commit-btn").addEventListener("click", async () => {
     showError($("global-error"), err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Play History / ListenBrainz — independent of the migration wizard above:
+// only needs MM5.DB, no Navidrome server/db/scope.
+
+const historyState = {
+  hasToken: false,
+  query: "",
+  offset: 0,
+  limit: 200,
+};
+
+function setMode(mode) {
+  const isHistory = mode === "history";
+  $("mode-migrate").hidden = isHistory;
+  $("mode-history").hidden = !isHistory;
+  $("mode-migrate-btn").setAttribute("aria-pressed", String(!isHistory));
+  $("mode-history-btn").setAttribute("aria-pressed", String(isHistory));
+  document.body.classList.toggle("history-mode", isHistory);
+}
+
+$("mode-migrate-btn").addEventListener("click", () => setMode("migrate"));
+$("mode-history-btn").addEventListener("click", () => setMode("history"));
+
+$("history-open-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  hideError($("history-open-error"));
+  const fd = new FormData(e.target);
+  const token = fd.get("listenBrainzToken") || "";
+  try {
+    const res = await api("POST", "/api/history/open", {
+      mmDbPath: fd.get("historyMmDbPath") || "",
+      listenBrainzToken: token,
+    });
+    historyState.hasToken = Boolean(token);
+    historyState.offset = 0;
+    $("history-table-section").hidden = false;
+    $("history-lb-section").hidden = !historyState.hasToken;
+    $("history-lb-preview").textContent = "";
+    $("history-lb-result").textContent = "";
+    await loadHistoryPage();
+  } catch (err) {
+    showError($("history-open-error"), err);
+  }
+});
+
+let historySearchTimer = null;
+$("history-search").addEventListener("input", () => {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(() => {
+    historyState.query = $("history-search").value.trim();
+    historyState.offset = 0;
+    loadHistoryPage();
+  }, 300);
+});
+
+$("history-prev-btn").addEventListener("click", () => {
+  historyState.offset = Math.max(0, historyState.offset - historyState.limit);
+  loadHistoryPage();
+});
+$("history-next-btn").addEventListener("click", () => {
+  historyState.offset += historyState.limit;
+  loadHistoryPage();
+});
+
+// historyRequestSeq guards against out-of-order responses: rapid search
+// typing or Prev/Next clicks can have an older request resolve after a
+// newer one, which would otherwise overwrite the newer result with stale data.
+let historyRequestSeq = 0;
+
+async function loadHistoryPage() {
+  hideError($("history-error"));
+  const seq = ++historyRequestSeq;
+  const requestOffset = historyState.offset;
+  try {
+    const params = new URLSearchParams({
+      q: historyState.query,
+      limit: String(historyState.limit),
+      offset: String(requestOffset),
+    });
+    const res = await api("GET", `/api/history/plays?${params}`);
+    if (seq !== historyRequestSeq) return; // a newer request has since superseded this one
+    renderHistoryTable(res.total, res.rows || [], requestOffset);
+  } catch (err) {
+    if (seq !== historyRequestSeq) return;
+    showError($("history-error"), err);
+  }
+}
+
+function renderHistoryTable(total, rows, offset) {
+  const tbody = $("history-table").querySelector("tbody");
+  tbody.innerHTML = "";
+  for (const p of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${p.PlayedAt ? new Date(p.PlayedAt).toLocaleString() : ""}</td>
+      <td>${escapeHTML(p.Artist)}</td>
+      <td>${escapeHTML(p.Title)}</td>
+      <td>${escapeHTML(p.Album)}</td>
+      <td>${escapeHTML(p.Path)}</td>`;
+    tbody.appendChild(tr);
+  }
+  const start = total === 0 ? 0 : offset + 1;
+  const end = offset + rows.length;
+  $("history-page-info").textContent = `Showing ${start}–${end} of ${total}`;
+  $("history-prev-btn").disabled = historyState.offset === 0;
+  $("history-next-btn").disabled = end >= total;
+}
+
+$("history-lb-preview-btn").addEventListener("click", async () => {
+  hideError($("history-error"));
+  try {
+    const res = await api("GET", "/api/history/listenbrainz/preview");
+    const range = res.count > 0 ? `${formatIsoDate(res.earliest)} – ${formatIsoDate(res.latest)}` : "";
+    $("history-lb-preview").innerHTML = `<div class="buckets"><span>${res.count} listen(s)</span><span>${range}</span></div>`;
+  } catch (err) {
+    showError($("history-error"), err);
+  }
+});
+
+async function submitListenBrainz(limit) {
+  hideError($("history-error"));
+  const preview = await api("GET", "/api/history/listenbrainz/preview");
+  const count = limit ? Math.min(limit, preview.count) : preview.count;
+  const range = preview.count > 0 ? ` (${formatIsoDate(preview.earliest)} – ${formatIsoDate(preview.latest)})` : "";
+  const confirmed = window.confirm(`Submit ${count} listen(s) to ListenBrainz?${limit ? " (test batch)" : range}`);
+  if (!confirmed) return;
+
+  $("history-lb-result").textContent = "Submitting… this may take a while for a large library.";
+  try {
+    const params = limit ? `?limit=${encodeURIComponent(limit)}` : "";
+    const res = await api("POST", `/api/history/listenbrainz/submit${params}`);
+    const errCount = (res.errors || []).length;
+    $("history-lb-result").textContent =
+      `Submitted ${res.submitted} listen(s) in ${res.batches} batch(es). ${errCount} error(s).`;
+  } catch (err) {
+    $("history-lb-result").textContent = "";
+    showError($("history-error"), err);
+  }
+}
+
+$("history-lb-test-btn").addEventListener("click", () => {
+  const n = Number($("history-lb-test-count").value) || 5;
+  submitListenBrainz(n);
+});
+$("history-lb-submit-btn").addEventListener("click", () => submitListenBrainz(0));
+
+// formatIsoDate renders a real UTC-instant ISO timestamp (unlike
+// formatNaiveDate above, Play.PlayedAt is a genuine UTC instant, so the
+// browser's normal timezone conversion is correct here).
+function formatIsoDate(iso) {
+  return iso ? new Date(iso).toLocaleString() : "";
+}

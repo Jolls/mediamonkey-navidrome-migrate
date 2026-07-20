@@ -22,6 +22,9 @@ type Source interface {
 	// ReadTracks returns every song, with RelPath computed against root.
 	// Rows whose path is not under root should be skipped.
 	ReadTracks(root string) ([]model.Track, error)
+	// ReadPlays returns every Played row, newest first, joined to its song's
+	// display metadata. Independent of any root — Play.Path is unnormalized.
+	ReadPlays() ([]model.Play, error)
 	Close() error
 }
 
@@ -88,6 +91,49 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 	return tracks, rows.Err()
 }
 
+// ReadPlays returns every Played row, newest first by real UTC instant,
+// joined to its song's display metadata (Songs has Artist/SongTitle/Album
+// directly — no join to Artists/ArtistsSongs needed).
+func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
+	rows, err := s.db.Query(`
+		SELECT p.IDSong, s.SongPath, s.Artist, s.SongTitle, s.Album, p.PlayDate, p.UTCOffset
+		FROM Played p JOIN Songs s ON s.ID = p.IDSong
+		ORDER BY (p.PlayDate - p.UTCOffset) DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var plays []model.Play
+	for rows.Next() {
+		var (
+			songID    int64
+			songPath  sql.NullString
+			artist    sql.NullString
+			title     sql.NullString
+			album     sql.NullString
+			playDate  float64
+			utcOffset float64
+		)
+		if err := rows.Scan(&songID, &songPath, &artist, &title, &album, &playDate, &utcOffset); err != nil {
+			return nil, err
+		}
+		if !songPath.Valid {
+			continue
+		}
+		plays = append(plays, model.Play{
+			SongID:   songID,
+			Path:     songPath.String,
+			Artist:   artist.String,
+			Title:    title.String,
+			Album:    album.String,
+			PlayedAt: FromMMPlayDate(playDate, utcOffset),
+		})
+	}
+	return plays, rows.Err()
+}
+
 // mmEpoch is MediaMonkey's TDateTime epoch: float day 0 == 1899-12-30.
 var mmEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
 
@@ -104,6 +150,18 @@ func FromMMDate(d float64) time.Time {
 		return time.Time{}
 	}
 	return mmEpoch.Add(time.Duration(d * float64(24*time.Hour)))
+}
+
+// FromMMPlayDate converts a Played row to a real UTC instant, using its
+// per-row UTCOffset (days, local-minus-UTC — e.g. Pacific Time is -8h =
+// -0.333... days). Unlike Songs.LastTimePlayed, Played rows carry a genuine
+// per-row offset, so this is a true UTC instant rather than a naive
+// wall-clock reading tagged with an arbitrary zone (contrast FromMMDate).
+func FromMMPlayDate(playDate, utcOffset float64) time.Time {
+	if playDate <= 0 {
+		return time.Time{}
+	}
+	return mmEpoch.Add(time.Duration((playDate - utcOffset) * float64(24*time.Hour)))
 }
 
 // ToRatingStep converts MediaMonkey's 0-100 rating (steps of 10, with -1/0/NULL
