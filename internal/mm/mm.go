@@ -94,9 +94,11 @@ var mmEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
 // FromMMDate converts a MediaMonkey TDateTime (float days since 1899-12-30) to
 // a time.Time. A value <= 0 means "never" and yields the zero Time.
 //
-// The float is the stored wall-clock, interpreted here as UTC. MM keeps local
-// time without a reliable per-row offset (see the Played.UTCOffset column), and
-// Navidrome stores play_date in UTC — so exact-timezone callers may adjust.
+// The float is the stored wall-clock, interpreted here as UTC purely as an
+// arbitrary Location tag — MM keeps local time without a reliable per-row
+// offset (see the Played.UTCOffset column), so this is not a real UTC
+// instant. Callers that write it back out (see nav.SetAnnotation) must
+// re-tag it with a real zone rather than trust this Location.
 func FromMMDate(d float64) time.Time {
 	if d <= 0 {
 		return time.Time{}

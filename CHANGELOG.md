@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `play_date` writes landed as a bogus near-year-1 date in Navidrome. The
+  writer formatted `LastPlayed` at a zero UTC offset, which
+  `modernc.org/sqlite` canonicalizes to a trailing `Z` on insert into a
+  `datetime`-affinity column — a shape none of Navidrome's own timestamp
+  columns use (they're always an explicit local offset). Fixed by
+  reinterpreting the same wall-clock reading in the local zone before
+  writing, matching Navidrome's own convention.
+
 ### Added
 - `scripts/build-linux.sh` and a `-Linux` switch on `scripts/build.ps1` to
   cross-compile a Linux binary (`bin/migrate-linux`); the app has no cgo

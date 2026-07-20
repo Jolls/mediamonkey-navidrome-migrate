@@ -136,12 +136,29 @@ func OpenWriter(path string) (AnnotationWriter, error) {
 
 func (w *sqliteWriter) Close() error { return w.db.Close() }
 
+// navTimeFormat matches the layout Navidrome itself writes into its own
+// datetime columns (e.g. created_at/updated_at): RFC3339 with an explicit
+// numeric offset, never a bare "Z".
+const navTimeFormat = "2006-01-02T15:04:05.999999999-07:00"
+
 // SetAnnotation upserts (userID, a.NavID)'s play_count/play_date, touching only
 // those two columns so an API-set rating/starred on the same row survives.
 func (w *sqliteWriter) SetAnnotation(userID string, a Annotation) error {
 	var playDate any
 	if !a.LastPlayed.IsZero() {
-		playDate = a.LastPlayed.UTC()
+		// a.LastPlayed carries a naive wall-clock reading (from MM's
+		// TDateTime, which has no reliable offset) tagged with UTC as an
+		// arbitrary Location, not a real UTC instant. Formatting it at that
+		// zero offset makes modernc.org/sqlite canonicalize the stored text
+		// to a trailing "Z" (confirmed: even an explicit "+00:00" string
+		// gets rewritten to "Z" on insert into this datetime-affinity
+		// column) — a shape none of Navidrome's own timestamp columns ever
+		// use. Reinterpreting the same clock reading in the local zone
+		// keeps the offset non-zero, matching Navidrome's own convention
+		// and avoiding that canonicalization path entirely.
+		lp := a.LastPlayed
+		local := time.Date(lp.Year(), lp.Month(), lp.Day(), lp.Hour(), lp.Minute(), lp.Second(), lp.Nanosecond(), time.Local)
+		playDate = local.Format(navTimeFormat)
 	}
 	_, err := w.db.Exec(`
 		INSERT INTO annotation (user_id, item_id, item_type, play_count, play_date)
