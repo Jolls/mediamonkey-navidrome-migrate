@@ -18,6 +18,9 @@ Go tool to migrate library data (ratings, play counts, playlists, etc.) from Med
 
 See [DESIGN.md](DESIGN.md) for architecture/approach and [HANDOFF.md](HANDOFF.md) for current status.
 
+## Idempotency
+Migration logic must be idempotent — re-running it against the same data must produce the same result. Any new write path (SQLite write or API call) needs to preserve this.
+
 ## Layout
 - `cmd/` — entrypoint(s)
 - `internal/` — core migration logic
