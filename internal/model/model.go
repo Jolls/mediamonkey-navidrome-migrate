@@ -13,7 +13,7 @@ type Rating int
 type Track struct {
 	RelPath    string    // path relative to the shared root, normalized (see match.NormalizeRel)
 	OrigPath   string    // original MM SongPath, for display only
-	Rating     Rating    // 0-5, converted from MM's 0-100 scale
+	RatingStep int       // MM rating as a 0-10 half-star step (0 = unrated); see Config.MapRating
 	PlayCount  int       // MM PlayCounter
 	LastPlayed time.Time // zero value means never played
 	MBID       string    // MusicBrainz recording id; "" when absent
@@ -77,15 +77,34 @@ type Config struct {
 	UserID string // Navidrome user that owns the annotations
 	Fields    Fields
 
-	// StarThreshold is the minimum MM rating (0-5) treated as "starred" when
-	// FieldStarred is set. MM has no true favorite flag, so this maps its
-	// rating scale onto Navidrome's boolean star. Zero means "unset"; callers
-	// should default it to 5 (DefaultStarThreshold).
+	// StarThreshold is the minimum mapped Navidrome rating (0-5) treated as
+	// "starred" when FieldStarred is set. MM has no true favorite flag, so
+	// this maps the rating scale onto Navidrome's boolean star. Zero means
+	// "unset"; callers should default it to 5 (DefaultStarThreshold).
 	StarThreshold Rating
+
+	// RatingMap converts a Track.RatingStep (0-10; 0 = unrated, 1-10 = MM's
+	// half-star steps 0.5-5.0) to the Navidrome rating actually written.
+	// Index 0 is the unrated mapping; indices 1-10 are the half-star steps.
+	// The UI is responsible for filling this in (its "round up"/"round down"
+	// presets and its custom editor all just produce this same table).
+	RatingMap [11]Rating
 }
 
 // DefaultStarThreshold is the StarThreshold used when a Config leaves it unset.
 const DefaultStarThreshold Rating = 5
+
+// MapRating converts a MM rating step (0-10, see Track.RatingStep) to the
+// Navidrome rating to write, via cfg.RatingMap. Out-of-range steps clamp.
+func (c Config) MapRating(step int) Rating {
+	if step < 0 {
+		step = 0
+	}
+	if step > 10 {
+		step = 10
+	}
+	return c.RatingMap[step]
+}
 
 // Change is one track's intended write, as shown in a dry-run. A nil pointer
 // means "leave this field untouched".

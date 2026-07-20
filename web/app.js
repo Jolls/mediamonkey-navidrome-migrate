@@ -38,6 +38,61 @@ async function api(method, path, body) {
   return data;
 }
 
+// ratingStepLabels[i] labels MM rating step i (0 = unrated, 1-10 = half-star
+// steps 0.5-5.0), matching model.Track.RatingStep.
+const ratingStepLabels = ["Unrated", "0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5"];
+
+function roundDownMap() {
+  return ratingStepLabels.map((_, step) => (step === 0 ? 0 : Math.floor(step / 2)));
+}
+
+function roundUpMap() {
+  return ratingStepLabels.map((_, step) => (step === 0 ? 0 : Math.ceil(step / 2)));
+}
+
+const ratingMapCustom = $("rating-map-custom");
+
+function buildRatingMapCustomRows(initial) {
+  ratingMapCustom.innerHTML = "";
+  ratingStepLabels.forEach((label, step) => {
+    const row = document.createElement("label");
+    const select = document.createElement("select");
+    select.dataset.ratingStep = String(step);
+    for (let star = 0; star <= 5; star++) {
+      const opt = document.createElement("option");
+      opt.value = String(star);
+      opt.textContent = String(star);
+      if (star === initial[step]) opt.selected = true;
+      select.appendChild(opt);
+    }
+    row.append(`MM ${label} ★  →  `, select);
+    ratingMapCustom.appendChild(row);
+  });
+}
+
+for (const radio of document.querySelectorAll('input[name="ratingMode"]')) {
+  radio.addEventListener("change", () => {
+    const custom = $("config-form").ratingMode.value === "custom";
+    ratingMapCustom.hidden = !custom;
+    if (custom && !ratingMapCustom.children.length) {
+      buildRatingMapCustomRows(roundDownMap());
+    }
+  });
+}
+
+function ratingMapFromForm(form) {
+  switch (form.ratingMode.value) {
+    case "up":
+      return roundUpMap();
+    case "custom":
+      return ratingStepLabels.map((_, step) =>
+        Number(ratingMapCustom.querySelector(`[data-rating-step="${step}"]`).value)
+      );
+    default:
+      return roundDownMap();
+  }
+}
+
 function configBody(form, extra) {
   const fd = new FormData(form);
   return {
@@ -50,6 +105,7 @@ function configBody(form, extra) {
     userId: (extra && extra.userId) || "",
     fields: fd.getAll("fields"),
     starThreshold: Number(fd.get("starThreshold")) || 0,
+    ratingMap: ratingMapFromForm(form),
   };
 }
 

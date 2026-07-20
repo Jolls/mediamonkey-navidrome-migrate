@@ -41,6 +41,13 @@
         <label>Star threshold (1&ndash;5)
           <input name="starThreshold" type="number" min="1" max="5" value="5" />
         </label>
+        <fieldset>
+          <legend>Rating mapping (MM half-star &rarr; Navidrome star)</legend>
+          <label><input type="radio" name="ratingMode" value="down" checked /> Round down (4.5&nbsp;&rarr;&nbsp;4)</label>
+          <label><input type="radio" name="ratingMode" value="up" /> Round up (4.5&nbsp;&rarr;&nbsp;5)</label>
+          <label><input type="radio" name="ratingMode" value="custom" /> Custom</label>
+          <div id="rating-map-custom" hidden></div>
+        </fieldset>
         <button type="submit">Connect</button>
       </form>
       <p id="config-error" class="error" hidden></p>

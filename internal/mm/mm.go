@@ -80,7 +80,7 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 		tracks = append(tracks, model.Track{
 			RelPath:    rel,
 			OrigPath:   songPath.String,
-			Rating:     FromMMRating(mmRating),
+			RatingStep: ToRatingStep(mmRating),
 			PlayCount:  playCount,
 			LastPlayed: FromMMDate(lastPlayed),
 		})
@@ -106,16 +106,17 @@ func FromMMDate(d float64) time.Time {
 	return mmEpoch.Add(time.Duration(d * float64(24*time.Hour)))
 }
 
-// FromMMRating converts MediaMonkey's 0-100 rating (with -1 = unrated and
-// half-star steps of 10) to a 0-5 star value, rounding to the nearest star.
-// Navidrome ratings are integer stars, so half-stars are unavoidably lost.
-func FromMMRating(mm int) model.Rating {
-	if mm < 0 {
+// ToRatingStep converts MediaMonkey's 0-100 rating (steps of 10, with -1/0/NULL
+// meaning unrated) to a 0-10 half-star step index: 0 = unrated, 1-10 = MM's
+// half-star steps 0.5-5.0. Pair with Config.MapRating to get the Navidrome
+// rating to write.
+func ToRatingStep(mm int) int {
+	if mm <= 0 {
 		return 0
 	}
-	r := (mm + 10) / 20
-	if r > 5 {
-		r = 5
+	step := mm / 10
+	if step > 10 {
+		step = 10
 	}
-	return model.Rating(r)
+	return step
 }

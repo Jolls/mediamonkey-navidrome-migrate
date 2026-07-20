@@ -36,7 +36,7 @@ Add `modernc.org/sqlite` (pure Go, no cgo — keep it that way): `go get modernc
     with a blanked drive, e.g. `":\My Music"`. Skip rows where `ok == false`
     or `SongPath` is NULL.
   - `OrigPath`: raw `SongPath`.
-  - `Rating`: `mm.FromMMRating(Rating)` (already implemented).
+  - `RatingStep`: `mm.ToRatingStep(Rating)` (already implemented); mapped to a Navidrome rating via `Config.MapRating`.
   - `PlayCount`: `PlayCounter`.
   - `LastPlayed`: `mm.FromMMDate(LastTimePlayed)` (already implemented).
   - `MBID`: `""` (not in MM5).

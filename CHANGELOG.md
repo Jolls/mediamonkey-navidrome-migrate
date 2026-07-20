@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-07-19
+
+### Added
+- Configurable MM half-star → Navidrome star rating mapping in the UI (round
+  down, round up, or a custom per-step table), replacing the previous
+  fixed round-down conversion. `Track.Rating` is now `Track.RatingStep`
+  (the raw 0-10 MM half-star step); `mm.FromMMRating` is replaced by
+  `mm.ToRatingStep` plus the new `Config.RatingMap`/`Config.MapRating`.
+
 ## [0.1.4] - 2026-07-19
 
 ### Added
