@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Quit button in the UI header, backed by a new `POST /api/quit` endpoint,
   to close the app without switching back to the terminal.
 
+### Fixed
+- Dry-run preview showed a "Last Played" time shifted by the browser's
+  timezone, disagreeing with what actually gets written. MediaMonkey's play
+  dates have no reliable real-world offset, so they're treated as literal
+  wall-clock digits everywhere; the preview now renders those digits as-is
+  instead of running them through `new Date().toLocaleString()`, which
+  wrongly treated them as a real UTC instant.
+
 ## [0.1.2] - 2026-07-19
 
 ### Fixed
