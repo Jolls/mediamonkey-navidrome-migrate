@@ -5,6 +5,7 @@
 package migrate
 
 import (
+	"log"
 	"strings"
 
 	"github.com/jolls/mm5-navidrome-migrate/internal/match"
@@ -13,6 +14,11 @@ import (
 	"github.com/jolls/mm5-navidrome-migrate/internal/nav"
 	"github.com/jolls/mm5-navidrome-migrate/internal/subsonic"
 )
+
+// commitLogInterval controls how often Commit reports progress to the
+// terminal — frequent enough to show it's alive on a large library, not so
+// frequent it floods the log.
+const commitLogInterval = 250
 
 // Pipeline wires the sources and sinks together. Ratings/stars go to the
 // Subsonic API; play counts and backdated dates go straight to navidrome.db.
@@ -75,14 +81,21 @@ func (p *Pipeline) Commit(scope model.Scope) (model.CommitResult, error) {
 	if err != nil {
 		return model.CommitResult{}, err
 	}
+	total := len(rep.Changes)
+	log.Printf("commit: applying %d change(s)", total)
 	var res model.CommitResult
-	for _, c := range rep.Changes {
+	for i, c := range rep.Changes {
 		if err := p.apply(c); err != nil {
 			res.Errors = append(res.Errors, model.CommitError{RelPath: c.RelPath, Err: err.Error()})
+			log.Printf("commit: error on %q: %v", c.RelPath, err)
 			continue
 		}
 		res.Applied++
+		if n := i + 1; n%commitLogInterval == 0 || n == total {
+			log.Printf("commit: %d/%d done (%d applied, %d errors)", n, total, res.Applied, len(res.Errors))
+		}
 	}
+	log.Printf("commit: finished — %d applied, %d errors", res.Applied, len(res.Errors))
 	return res, nil
 }
 

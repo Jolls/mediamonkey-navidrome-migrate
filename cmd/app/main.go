@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	if runtime.GOOS == "linux" && ensureTerminal() {
+		return
+	}
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		log.Fatalf("listen: %v", err)
