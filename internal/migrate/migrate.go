@@ -63,8 +63,10 @@ func (p *Pipeline) DryRun(scope model.Scope) (model.DryRunReport, error) {
 		switch m.Status {
 		case model.Ambiguous:
 			rep.Ambiguous++
+			rep.Unresolved = append(rep.Unresolved, model.UnresolvedTrack{RelPath: m.Source.RelPath, Status: m.Status})
 		case model.Unmatched:
 			rep.Unmatched++
+			rep.Unresolved = append(rep.Unresolved, model.UnresolvedTrack{RelPath: m.Source.RelPath, Status: m.Status})
 		case model.Matched:
 			rep.Matched++
 			rep.Changes = append(rep.Changes, p.change(m))
