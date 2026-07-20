@@ -61,6 +61,23 @@ type configRequest struct {
 	UserID        string   `json:"userId"`
 	Fields        []string `json:"fields"` // any of "rating", "playCount", "starred"
 	StarThreshold int      `json:"starThreshold"` // 0-5; 0 means "use the default"
+	RatingMap     [11]int  `json:"ratingMap"`      // MM rating step (0=unrated, 1-10=half-star) -> Navidrome rating 0-5
+}
+
+// ratingMapFromInts converts and clamps the UI-supplied rating map into
+// model.Rating values.
+func ratingMapFromInts(in [11]int) [11]model.Rating {
+	var out [11]model.Rating
+	for i, v := range in {
+		if v < 0 {
+			v = 0
+		}
+		if v > 5 {
+			v = 5
+		}
+		out[i] = model.Rating(v)
+	}
+	return out
 }
 
 func fieldsFromNames(names []string) (model.Fields, error) {
@@ -102,6 +119,7 @@ func (s *apiServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		UserID:        req.UserID,
 		Fields:        fields,
 		StarThreshold: model.Rating(req.StarThreshold),
+		RatingMap:     ratingMapFromInts(req.RatingMap),
 	}
 
 	log.Printf("config: opening MM5.DB at %q", cfg.MMDBPath)

@@ -14,7 +14,7 @@
 ## 3. Write strategy — API-first, direct DB only as fallback
 | Data | Path | Notes |
 |---|---|---|
-| Rating | **Subsonic API** `setRating` | Convert MM 0–100 → 1–5 (`round(r/20)`); half-stars lost either way |
+| Rating | **Subsonic API** `setRating` | MM 0–100 → 0-10 half-star step (`mm.ToRatingStep`) → 0–5 via user-configurable `Config.RatingMap` (UI presets: round down/up, or a custom per-step table) |
 | Favorite / starred | **Subsonic API** `star` (optional, off by default) | MM has no true "favorite"; opt-in mapping |
 | Play count + last-played | **Direct write** to `annotation` | API `scrobble` can't set exact counts or backdate — unavoidable. **Set (overwrite), never add** → keeps re-runs idempotent |
 | Playlists | Phase 2 | Native `.m3u` auto-import already covers this |
@@ -30,7 +30,7 @@
 ## 5. Data sources
 - **MM5.DB** (read-only, schema verified): `Songs` — `SongPath`, `Rating`, `PlayCounter`, `LastTimePlayed`.
   - `SongPath`: absolute Windows path with the **drive letter blanked** (`:\My Music\Artist\...`); the root chosen for stripping is in this stored form.
-  - `Rating`: 0–100, `-1`/NULL = unrated (`mm.FromMMRating`).
+  - `Rating`: 0–100, `-1`/NULL = unrated (`mm.ToRatingStep`).
   - `LastTimePlayed`/`DateAdded`: **TDateTime float** = days since 1899-12-30, `0` = never (`mm.FromMMDate`). Not Unix time.
   - No MBID column (buried in `ExtendedTags`) → MM-side MBID matching deferred.
   - `Played(IDSong, PlayDate, UTCOffset)`: per-play history — future source for backdated per-scrobble fidelity.

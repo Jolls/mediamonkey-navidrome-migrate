@@ -104,8 +104,9 @@ func (p *Pipeline) Commit(scope model.Scope) (model.CommitResult, error) {
 func (p *Pipeline) change(m model.Match) model.Change {
 	c := model.Change{RelPath: m.Source.RelPath, NavID: m.Nav.ID}
 	f := p.Cfg.Fields
+	rating := p.Cfg.MapRating(m.Source.RatingStep)
 	if f.Has(model.FieldRating) {
-		r := m.Source.Rating
+		r := rating
 		c.Rating = &r
 	}
 	if f.Has(model.FieldPlayCount) {
@@ -118,7 +119,7 @@ func (p *Pipeline) change(m model.Match) model.Change {
 		if threshold == 0 {
 			threshold = model.DefaultStarThreshold
 		}
-		s := m.Source.Rating >= threshold
+		s := rating >= threshold
 		c.Starred = &s
 	}
 	return c
