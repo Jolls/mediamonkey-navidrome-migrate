@@ -53,6 +53,15 @@ function configBody(form, extra) {
   };
 }
 
+$("quit-btn").addEventListener("click", async () => {
+  try {
+    await api("POST", "/api/quit");
+  } catch {
+    // server is exiting; the fetch may fail to complete
+  }
+  document.body.innerHTML = "<p>You can close this window.</p>";
+});
+
 for (const btn of document.querySelectorAll(".browse-btn")) {
   btn.addEventListener("click", async () => {
     hideError($("config-error"));
@@ -148,7 +157,7 @@ async function runDryRun(dir) {
       <td>${escapeHTML(c.RelPath)}</td>
       <td>${c.Rating ?? ""}</td>
       <td>${c.PlayCount ?? ""}</td>
-      <td>${c.LastPlayed ? new Date(c.LastPlayed).toLocaleString() : ""}</td>
+      <td>${c.LastPlayed ? formatNaiveDate(c.LastPlayed) : ""}</td>
       <td>${c.Starred === null || c.Starred === undefined ? "" : c.Starred}</td>`;
     tbody.appendChild(tr);
   }
@@ -161,6 +170,18 @@ $("review-back-btn").addEventListener("click", () => {
   hideError($("global-error"));
   showStep("step-scope");
 });
+
+// formatNaiveDate renders an ISO timestamp's literal digits (the wall-clock
+// MediaMonkey recorded, which has no reliable real-world offset — see
+// mm.FromMMDate) without letting the browser's timezone shift them, the way
+// `new Date(iso).toLocaleString()` would.
+function formatNaiveDate(iso) {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return iso;
+  const [, y, mo, d, h, mi, s] = m.map(Number);
+  const asUTC = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+  return asUTC.toLocaleString(undefined, { timeZone: "UTC" });
+}
 
 function escapeHTML(s) {
   const div = document.createElement("div");
