@@ -204,6 +204,16 @@ async function runDryRun(dir) {
       <span>Changes: ${(rep.Changes || []).length}</span>
     </div>`;
 
+  const unresolvedTable = $("unresolved-table");
+  const unresolvedBody = unresolvedTable.querySelector("tbody");
+  unresolvedBody.innerHTML = "";
+  for (const u of rep.Unresolved || []) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${escapeHTML(u.RelPath)}</td><td>${statusNames[u.Status]}</td>`;
+    unresolvedBody.appendChild(tr);
+  }
+  unresolvedTable.hidden = (rep.Unresolved || []).length === 0;
+
   const table = $("dryrun-table");
   const tbody = table.querySelector("tbody");
   tbody.innerHTML = "";

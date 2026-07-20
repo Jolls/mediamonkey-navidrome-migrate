@@ -117,11 +117,19 @@ type Change struct {
 	Starred    *bool
 }
 
+// UnresolvedTrack is one track that didn't cleanly match, shown in the dry-run
+// review so the user can see what needs attention before commit.
+type UnresolvedTrack struct {
+	RelPath string
+	Status  MatchStatus // Unmatched or Ambiguous
+}
+
 // DryRunReport summarizes what a Commit over the same scope would do.
 type DryRunReport struct {
 	Scope                         Scope
 	Matched, Ambiguous, Unmatched int
 	Changes                       []Change
+	Unresolved                    []UnresolvedTrack
 }
 
 // CommitResult reports what actually happened.
