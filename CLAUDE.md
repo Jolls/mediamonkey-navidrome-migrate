@@ -43,7 +43,7 @@ Never commit to main. Before first commit in session, check current branch; if o
 4. On approval, commit. Never commit without the user's explicit go-ahead in that turn — a prior "commit this" doesn't authorize a later, different change; asking "commit?" and proceeding without waiting for a reply doesn't count as approval; being told to fix/change something is not itself a commit go-ahead. If unsure whether you have it, ask before running `git commit`.
 
 ## Changelog
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Update CHANGELOG.md once per PR/merge (not per commit); all branch changes under one version entry, grouped under `### Added`/`### Changed`/`### Fixed`/`### Removed`/`### Security`/`### Deprecated` subheadings (only include the subheadings you need). Format:
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Update CHANGELOG.md once per PR/merge (not per commit); all branch changes under one version entry, grouped under `### Added`/`### Changed`/`### Fixed`/`### Removed`/`### Security`/`### Deprecated` subheadings (only include the subheadings you need). Always bump the version — never leave an entry under `[Unreleased]`. Format:
 ```
 ## [0.1.X] - YYYY-MM-DD
 ### Added
