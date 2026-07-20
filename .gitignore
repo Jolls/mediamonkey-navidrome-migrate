@@ -2,6 +2,7 @@
 /app
 /app.exe
 *.exe
+/bin/
 
 # Test / build artifacts
 *.out
