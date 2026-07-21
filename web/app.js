@@ -279,6 +279,7 @@ $("commit-btn").addEventListener("click", async () => {
 const historyState = {
   hasToken: false,
   query: "",
+  hideSubmitted: false,
   offset: 0,
   limit: 200,
 };
@@ -327,6 +328,12 @@ $("history-search").addEventListener("input", () => {
   }, 300);
 });
 
+$("history-hide-submitted").addEventListener("change", () => {
+  historyState.hideSubmitted = $("history-hide-submitted").checked;
+  historyState.offset = 0;
+  loadHistoryPage();
+});
+
 $("history-prev-btn").addEventListener("click", () => {
   historyState.offset = Math.max(0, historyState.offset - historyState.limit);
   loadHistoryPage();
@@ -351,6 +358,7 @@ async function loadHistoryPage() {
       limit: String(historyState.limit),
       offset: String(requestOffset),
     });
+    if (historyState.hideSubmitted) params.set("unsubmitted", "true");
     const res = await api("GET", `/api/history/plays?${params}`);
     if (seq !== historyRequestSeq) return; // a newer request has since superseded this one
     renderHistoryTable(res.total, res.rows || [], requestOffset);

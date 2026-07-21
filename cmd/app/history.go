@@ -100,16 +100,21 @@ func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	unsubmittedOnly := r.URL.Query().Get("unsubmitted") == "true"
 	filtered := plays
-	if q != "" {
+	if q != "" || unsubmittedOnly {
 		filtered = make([]model.Play, 0, len(plays))
 		for _, p := range plays {
-			if strings.Contains(strings.ToLower(p.Artist), q) ||
+			if unsubmittedOnly && lbState != nil && lbState.Has(p.ID) {
+				continue
+			}
+			if q != "" && !(strings.Contains(strings.ToLower(p.Artist), q) ||
 				strings.Contains(strings.ToLower(p.Title), q) ||
 				strings.Contains(strings.ToLower(p.Album), q) ||
-				strings.Contains(strings.ToLower(p.Path), q) {
-				filtered = append(filtered, p)
+				strings.Contains(strings.ToLower(p.Path), q)) {
+				continue
 			}
+			filtered = append(filtered, p)
 		}
 	}
 
