@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-07-20
+
+### Added
+- ListenBrainz submissions are now tracked locally, in a sidecar JSON file
+  next to `MM5.DB` keyed by MediaMonkey's play-history row IDs — re-running
+  a submit (or reopening the app later) only sends plays not already
+  confirmed submitted, on top of ListenBrainz's own best-effort server-side
+  dedup. The Play History preview now also shows how many plays were
+  already submitted.
+- Play History table now shows each row's ID, to make it easy to cross-check
+  against the sidecar submitted-listens file.
+
+### Fixed
+- Reopening MM5.DB without re-entering the ListenBrainz token no longer
+  hides submitted status for every row — the local submitted-state file is
+  local data and doesn't need a token to read; the token is only required
+  to actually submit new listens.
+
 ## [0.1.7] - 2026-07-20
 
 ### Added

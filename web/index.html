@@ -125,7 +125,7 @@
         </label>
         <table id="history-table">
           <thead>
-            <tr><th>Played at</th><th>Artist</th><th>Title</th><th>Album</th><th>Path</th></tr>
+            <tr><th>ID</th><th>Played at</th><th>Artist</th><th>Title</th><th>Album</th><th>Path</th><th>Submitted</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -142,11 +142,11 @@
         <button id="history-lb-preview-btn" type="button">Preview</button>
         <div id="history-lb-preview"></div>
         <fieldset>
-          <legend>Test batch (verify it works before submitting everything)</legend>
-          <label>Number of most recent plays
+          <legend>Small batch (safe to repeat &mdash; always sends the next unsubmitted plays, most recent first)</legend>
+          <label>Number of plays
             <input id="history-lb-test-count" type="number" min="1" value="5" />
           </label>
-          <button id="history-lb-test-btn" type="button">Submit test batch</button>
+          <button id="history-lb-test-btn" type="button">Submit next unsubmitted batch</button>
         </fieldset>
         <button id="history-lb-submit-btn" type="button">Submit all listens</button>
         <p id="history-lb-result"></p>

@@ -96,7 +96,7 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 // directly — no join to Artists/ArtistsSongs needed).
 func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
 	rows, err := s.db.Query(`
-		SELECT p.IDSong, s.SongPath, s.Artist, s.SongTitle, s.Album, p.PlayDate, p.UTCOffset
+		SELECT p.IDPlayed, p.IDSong, s.SongPath, s.Artist, s.SongTitle, s.Album, p.PlayDate, p.UTCOffset
 		FROM Played p JOIN Songs s ON s.ID = p.IDSong
 		ORDER BY (p.PlayDate - p.UTCOffset) DESC
 	`)
@@ -108,6 +108,7 @@ func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
 	var plays []model.Play
 	for rows.Next() {
 		var (
+			idPlayed  int64
 			songID    int64
 			songPath  sql.NullString
 			artist    sql.NullString
@@ -116,13 +117,14 @@ func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
 			playDate  float64
 			utcOffset float64
 		)
-		if err := rows.Scan(&songID, &songPath, &artist, &title, &album, &playDate, &utcOffset); err != nil {
+		if err := rows.Scan(&idPlayed, &songID, &songPath, &artist, &title, &album, &playDate, &utcOffset); err != nil {
 			return nil, err
 		}
 		if !songPath.Valid {
 			continue
 		}
 		plays = append(plays, model.Play{
+			ID:       idPlayed,
 			SongID:   songID,
 			Path:     songPath.String,
 			Artist:   artist.String,

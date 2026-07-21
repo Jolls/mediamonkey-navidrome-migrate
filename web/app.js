@@ -366,11 +366,13 @@ function renderHistoryTable(total, rows, offset) {
   for (const p of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td>${p.ID}</td>
       <td>${p.PlayedAt ? new Date(p.PlayedAt).toLocaleString() : ""}</td>
       <td>${escapeHTML(p.Artist)}</td>
       <td>${escapeHTML(p.Title)}</td>
       <td>${escapeHTML(p.Album)}</td>
-      <td>${escapeHTML(p.Path)}</td>`;
+      <td>${escapeHTML(p.Path)}</td>
+      <td>${p.Submitted ? "✓" : ""}</td>`;
     tbody.appendChild(tr);
   }
   const start = total === 0 ? 0 : offset + 1;
@@ -385,7 +387,7 @@ $("history-lb-preview-btn").addEventListener("click", async () => {
   try {
     const res = await api("GET", "/api/history/listenbrainz/preview");
     const range = res.count > 0 ? `${formatIsoDate(res.earliest)} – ${formatIsoDate(res.latest)}` : "";
-    $("history-lb-preview").innerHTML = `<div class="buckets"><span>${res.count} listen(s)</span><span>${range}</span></div>`;
+    $("history-lb-preview").innerHTML = `<div class="buckets"><span>${res.count} listen(s) to submit</span><span>Already submitted: ${res.alreadySubmitted}</span><span>${range}</span></div>`;
   } catch (err) {
     showError($("history-error"), err);
   }
