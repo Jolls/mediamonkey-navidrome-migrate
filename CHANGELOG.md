@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-07-21
+
+### Added
+- "Hide already submitted" checkbox on the Play History table, to filter the
+  view down to plays not yet confirmed submitted to ListenBrainz.
+
+### Fixed
+- MediaMonkey's `Played.PlayDate` is already a UTC instant (confirmed
+  against MediaMonkey's own display, which adds `UTCOffset` to get local
+  time); `FromMMPlayDate` and the play-history query were incorrectly
+  subtracting `UTCOffset` again, shifting play timestamps and their sort
+  order.
+
 ## [0.1.8] - 2026-07-20
 
 ### Added
