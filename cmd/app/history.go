@@ -49,6 +49,14 @@ func (s *apiServer) handleHistoryOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("history: loaded %d play(s)", len(plays))
 
+	lbState, err := listenbrainz.LoadStore(listenbrainz.StorePath(req.MMDBPath))
+	if err != nil {
+		log.Printf("history: load submitted-listens state failed: %v", err)
+		source.Close()
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("load ListenBrainz submission state: %w", err))
+		return
+	}
+
 	var lb *listenbrainz.Client
 	if req.ListenBrainzToken != "" {
 		lb = listenbrainz.New(req.ListenBrainzToken)
@@ -62,20 +70,29 @@ func (s *apiServer) handleHistoryOpen(w http.ResponseWriter, r *http.Request) {
 	s.historyPlays = plays
 	s.historyOpen = true
 	s.lbClient = lb
+	s.lbState = lbState
 	s.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "total": len(plays)})
 }
 
+// playRow is one row of GET /api/history/plays, adding the submitted status
+// that model.Play itself doesn't carry (a ListenBrainz/display concern, not
+// a MediaMonkey domain field).
+type playRow struct {
+	model.Play
+	Submitted bool `json:"Submitted"`
+}
+
 // playsResponse is the JSON body for GET /api/history/plays.
 type playsResponse struct {
-	Total int          `json:"total"`
-	Rows  []model.Play `json:"rows"`
+	Total int       `json:"total"`
+	Rows  []playRow `json:"rows"`
 }
 
 func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	open, plays := s.historyOpen, s.historyPlays
+	open, plays, lbState := s.historyOpen, s.historyPlays, s.lbState
 	s.mu.Unlock()
 	if !open {
 		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
@@ -114,30 +131,54 @@ func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 		end = total
 	}
 
-	writeJSON(w, http.StatusOK, playsResponse{Total: total, Rows: filtered[offset:end]})
+	page := filtered[offset:end]
+	rows := make([]playRow, len(page))
+	for i, p := range page {
+		rows[i] = playRow{Play: p, Submitted: lbState != nil && lbState.Has(p.ID)}
+	}
+
+	writeJSON(w, http.StatusOK, playsResponse{Total: total, Rows: rows})
 }
 
-// playsToListens converts plays to ListenBrainz listens, skipping any without
-// a real timestamp or artist/title — the only filter step between "loaded
-// plays" and "what gets submitted", shared by the preview and submit
-// endpoints so the count a user confirms matches what's actually sent.
-func playsToListens(plays []model.Play, limit int) []listenbrainz.Listen {
-	listens := make([]listenbrainz.Listen, 0, len(plays))
+// pendingListens is the result of filtering plays down to what's actually
+// left to submit: listens and ids are parallel slices (ids[i] is the
+// model.Play.ID that produced listens[i]), so a caller can report back to
+// the SubmittedStore exactly which plays a submission covered.
+type pendingListens struct {
+	Listens []listenbrainz.Listen
+	IDs     []int64
+}
+
+// playsToListens converts plays to ListenBrainz listens, skipping any
+// without a real timestamp or artist/title, and any already recorded in
+// alreadySubmitted (nil means "nothing submitted yet") — the only filter
+// step between "loaded plays" and "what gets submitted", shared by the
+// preview and submit endpoints so the count a user confirms matches what's
+// actually sent.
+func playsToListens(plays []model.Play, alreadySubmitted *listenbrainz.SubmittedStore, limit int) pendingListens {
+	pending := pendingListens{
+		Listens: make([]listenbrainz.Listen, 0, len(plays)),
+		IDs:     make([]int64, 0, len(plays)),
+	}
 	for _, p := range plays {
 		if p.PlayedAt.IsZero() || p.Artist == "" || p.Title == "" {
 			continue
 		}
-		listens = append(listens, listenbrainz.Listen{
+		if alreadySubmitted != nil && alreadySubmitted.Has(p.ID) {
+			continue
+		}
+		pending.Listens = append(pending.Listens, listenbrainz.Listen{
 			ListenedAt:  p.PlayedAt.Unix(),
 			ArtistName:  p.Artist,
 			TrackName:   p.Title,
 			ReleaseName: p.Album,
 		})
-		if limit > 0 && len(listens) >= limit {
+		pending.IDs = append(pending.IDs, p.ID)
+		if limit > 0 && len(pending.Listens) >= limit {
 			break
 		}
 	}
-	return listens
+	return pending
 }
 
 func intQuery(r *http.Request, name string, def int) int {
@@ -154,14 +195,15 @@ func intQuery(r *http.Request, name string, def int) int {
 
 // listenBrainzPreviewResponse is the JSON body for GET /api/history/listenbrainz/preview.
 type listenBrainzPreviewResponse struct {
-	Count    int    `json:"count"`
-	Earliest string `json:"earliest,omitempty"`
-	Latest   string `json:"latest,omitempty"`
+	Count            int    `json:"count"`
+	AlreadySubmitted int    `json:"alreadySubmitted"`
+	Earliest         string `json:"earliest,omitempty"`
+	Latest           string `json:"latest,omitempty"`
 }
 
 func (s *apiServer) handleListenBrainzPreview(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	open, lb, plays := s.historyOpen, s.lbClient, s.historyPlays
+	open, lb, lbState, plays := s.historyOpen, s.lbClient, s.lbState, s.historyPlays
 	s.mu.Unlock()
 	if !open {
 		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
@@ -172,13 +214,17 @@ func (s *apiServer) handleListenBrainzPreview(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	listens := playsToListens(plays, 0)
-	resp := listenBrainzPreviewResponse{Count: len(listens)}
-	if len(listens) > 0 {
-		// listens is derived from plays, which ReadPlays sorts newest first
-		// by real UTC instant: listens[0] is latest, last is earliest.
-		resp.Latest = time.Unix(listens[0].ListenedAt, 0).UTC().Format("2006-01-02T15:04:05Z")
-		resp.Earliest = time.Unix(listens[len(listens)-1].ListenedAt, 0).UTC().Format("2006-01-02T15:04:05Z")
+	pending := playsToListens(plays, lbState, 0)
+	all := playsToListens(plays, nil, 0)
+	resp := listenBrainzPreviewResponse{
+		Count:            len(pending.Listens),
+		AlreadySubmitted: len(all.Listens) - len(pending.Listens),
+	}
+	if len(pending.Listens) > 0 {
+		// pending.Listens is derived from plays, which ReadPlays sorts newest
+		// first by real UTC instant: [0] is latest, last is earliest.
+		resp.Latest = time.Unix(pending.Listens[0].ListenedAt, 0).UTC().Format("2006-01-02T15:04:05Z")
+		resp.Earliest = time.Unix(pending.Listens[len(pending.Listens)-1].ListenedAt, 0).UTC().Format("2006-01-02T15:04:05Z")
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -192,7 +238,7 @@ type listenBrainzSubmitResponse struct {
 
 func (s *apiServer) handleListenBrainzSubmit(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	open, lb, plays := s.historyOpen, s.lbClient, s.historyPlays
+	open, lb, lbState, plays := s.historyOpen, s.lbClient, s.lbState, s.historyPlays
 	s.mu.Unlock()
 	if !open {
 		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
@@ -204,10 +250,21 @@ func (s *apiServer) handleListenBrainzSubmit(w http.ResponseWriter, r *http.Requ
 	}
 
 	limit := intQuery(r, "limit", 0)
-	listens := playsToListens(plays, limit)
+	pending := playsToListens(plays, lbState, limit)
 
-	log.Printf("listenbrainz: submitting %d listen(s)", len(listens))
-	res, err := lb.SubmitAll(listens, nil)
+	// progress reports the cumulative count of listens confirmed submitted
+	// so far, in submission order — since pending.IDs is built in the same
+	// order as pending.Listens, ids[:done] are exactly the plays that batch
+	// covered. Persisted incrementally so a failure partway through a large
+	// submit doesn't lose credit for batches that did succeed.
+	progress := func(done, total int) {
+		if err := lbState.MarkSubmitted(pending.IDs[:done]); err != nil {
+			log.Printf("listenbrainz: failed to persist submitted-listens state: %v", err)
+		}
+	}
+
+	log.Printf("listenbrainz: submitting %d listen(s)", len(pending.Listens))
+	res, err := lb.SubmitAll(pending.Listens, progress)
 	if err != nil {
 		log.Printf("listenbrainz: submit failed after %d applied: %v", res.Submitted, err)
 		writeJSON(w, http.StatusBadGateway, listenBrainzSubmitResponse{

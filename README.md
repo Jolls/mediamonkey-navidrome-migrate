@@ -33,6 +33,8 @@ Since Navidrome itself has nowhere to store full play history (see table above),
 
 Because it's a one-way write to a real external account, submit a small test batch (the most recent handful of plays) first and check it shows up on your ListenBrainz profile before submitting your full history.
 
+Submitted plays are tracked locally in a sidecar file next to `MM5.DB` (`MM5.DB.listenbrainz-submitted.json`), keyed by MediaMonkey's own play-history row IDs — so re-running a submit, or opening the app again later, only ever sends plays that haven't been confirmed submitted yet.
+
 ## Potential future features
 
 - Migrate non-smart MM playlists (`Playlists`/`PlaylistSongs`) to Navidrome's `playlist`/`playlist_tracks` tables.

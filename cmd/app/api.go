@@ -34,6 +34,7 @@ type apiServer struct {
 	historySource mm.Source
 	historyPlays  []model.Play // cached on open; ~28k rows is trivial in memory
 	lbClient      *listenbrainz.Client
+	lbState       *listenbrainz.SubmittedStore
 }
 
 func newAPIServer() *apiServer {

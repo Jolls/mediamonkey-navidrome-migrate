@@ -23,6 +23,7 @@ type Track struct {
 // denormalized for display and ListenBrainz export. Independent of the
 // Navidrome matching pipeline — Path is raw and unnormalized, for display only.
 type Play struct {
+	ID       int64 // MM Played.IDPlayed — stable identity for ListenBrainz submission tracking
 	SongID   int64
 	Path     string // raw MM SongPath, display only
 	Artist   string
