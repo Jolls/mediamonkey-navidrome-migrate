@@ -88,6 +88,11 @@ th, td {
   margin-right: 1.5rem;
 }
 
+td.mismatch {
+  background: light-dark(#fdecea, #4a2020);
+  color: light-dark(#c62828, #ff8a80);
+}
+
 .mode-switch {
   display: flex;
   gap: 0.5rem;

@@ -226,12 +226,49 @@ async function runDryRun(dir) {
       <td>${c.Rating ?? ""}</td>
       <td>${c.PlayCount ?? ""}</td>
       <td>${c.LastPlayed ? formatNaiveDate(c.LastPlayed) : ""}</td>
-      <td>${c.Starred === null || c.Starred === undefined ? "" : c.Starred}</td>`;
+      <td>${c.Starred === null || c.Starred === undefined ? "" : c.Starred}</td>
+      <td>${c.DateAdded ? formatNaiveDate(c.DateAdded) : ""}</td>`;
     tbody.appendChild(tr);
   }
   table.hidden = (rep.Changes || []).length === 0;
 
   $("commit-btn").dataset.dir = dir;
+}
+
+$("verify-btn").addEventListener("click", async () => {
+  hideError($("global-error"));
+  const dir = $("commit-btn").dataset.dir || "";
+  try {
+    const rep = await api("GET", `/api/verify?dir=${encodeURIComponent(dir)}`);
+    $("verify-summary").innerHTML = `
+      <div class="buckets">
+        <span>Checked: ${rep.Checked}</span>
+        <span>Mismatched: ${rep.Mismatched}</span>
+      </div>`;
+
+    const table = $("verify-table");
+    const tbody = table.querySelector("tbody");
+    tbody.innerHTML = "";
+    for (const row of rep.Rows || []) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHTML(row.RelPath)}</td>
+        <td class="${row.RatingMatch ? "" : "mismatch"}">${row.ExpectedRating} / ${row.ActualRating}</td>
+        <td class="${row.PlayCountMatch ? "" : "mismatch"}">${row.ExpectedPlayCount} / ${row.ActualPlayCount}</td>
+        <td class="${row.LastPlayedMatch ? "" : "mismatch"}">${formatDiffTime(row.ExpectedLastPlayed)} / ${formatDiffTime(row.ActualLastPlayed)}</td>
+        <td class="${!row.DateAddedChecked || row.DateAddedMatch ? "" : "mismatch"}">${row.DateAddedChecked ? `${formatDiffTime(row.ExpectedDateAdded)} / ${formatDiffTime(row.ActualDateAdded)}` : "(unknown in MM)"}</td>`;
+      tbody.appendChild(tr);
+    }
+    table.hidden = (rep.Rows || []).length === 0;
+  } catch (err) {
+    showError($("global-error"), err);
+  }
+});
+
+// formatDiffTime renders a verify report's expected/actual timestamp, or
+// "(none)" for the JSON null a *time.Time serializes to when unset.
+function formatDiffTime(iso) {
+  return iso ? formatNaiveDate(iso) : "(none)";
 }
 
 $("review-back-btn").addEventListener("click", () => {

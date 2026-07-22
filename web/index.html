@@ -43,6 +43,7 @@
           <label><input type="checkbox" name="fields" value="rating" checked /> Rating</label>
           <label><input type="checkbox" name="fields" value="playCount" checked /> Play count &amp; last played</label>
           <label><input type="checkbox" name="fields" value="starred" /> Starred (MM rating &ge; threshold)</label>
+          <label><input type="checkbox" name="fields" value="dateAdded" /> Date added</label>
         </fieldset>
         <label>Star threshold (1&ndash;5)
           <input name="starThreshold" type="number" min="1" max="5" value="5" />
@@ -88,12 +89,23 @@
       </table>
       <table id="dryrun-table" hidden>
         <thead>
-          <tr><th>Path</th><th>Rating</th><th>Play count</th><th>Last played</th><th>Starred</th></tr>
+          <tr><th>Path</th><th>Rating</th><th>Play count</th><th>Last played</th><th>Starred</th><th>Date added</th></tr>
         </thead>
         <tbody></tbody>
       </table>
       <button id="commit-btn">Commit this scope</button>
       <p id="commit-result"></p>
+
+      <h3>Verify against navidrome.db</h3>
+      <p>Compares MediaMonkey's values for this scope against what's currently stored in navidrome.db, regardless of which fields are checked above or whether you've committed yet.</p>
+      <button id="verify-btn" type="button">Verify</button>
+      <div id="verify-summary"></div>
+      <table id="verify-table" hidden>
+        <thead>
+          <tr><th>Path</th><th>Rating (exp/act)</th><th>Play count (exp/act)</th><th>Last played (exp/act)</th><th>Date added (exp/act)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </section>
 
     <p id="global-error" class="error" hidden></p>

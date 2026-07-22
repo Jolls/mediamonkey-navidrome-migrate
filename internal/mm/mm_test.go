@@ -37,12 +37,12 @@ func openFixture(t *testing.T) *sqliteSource {
 
 	if _, err := db.Exec(`
 		CREATE TABLE Songs (ID INTEGER PRIMARY KEY, SongPath TEXT, Artist TEXT, AlbumArtist TEXT, SongTitle TEXT, Album TEXT,
-			SongLength INTEGER, Rating INTEGER, PlayCounter INTEGER, LastTimePlayed REAL);
+			SongLength INTEGER, Rating INTEGER, PlayCounter INTEGER, LastTimePlayed REAL, DateAdded REAL);
 		CREATE TABLE Played (IDPlayed INTEGER PRIMARY KEY, IDSong INTEGER, PlayDate REAL, UTCOffset REAL);
-		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed)
-			VALUES (1, ':\My Music\a.mp3', 'Artist A', 'Artist A', 'Title A', 'Album A', 210000, 80, 3, 41650);
-		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed)
-			VALUES (2, ':\My Music\b.mp3', 'Artist B', 'Artist B', 'Title B', 'Album B', 180000, -1, 0, 0);
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed, DateAdded)
+			VALUES (1, ':\My Music\a.mp3', 'Artist A', 'Artist A', 'Title A', 'Album A', 210000, 80, 3, 41650, 41600);
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed, DateAdded)
+			VALUES (2, ':\My Music\b.mp3', 'Artist B', 'Artist B', 'Title B', 'Album B', 180000, -1, 0, 0, 0);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (1, 41650.5, -0.333333333);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (1, 41651.5, -0.333333333);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (2, 41652.5, 0);
@@ -50,6 +50,26 @@ func openFixture(t *testing.T) *sqliteSource {
 		t.Fatal(err)
 	}
 	return &sqliteSource{db: db}
+}
+
+// TestReadTracksDateAdded locks in that DateAdded is parsed with the same
+// FromMMDate TDateTime conversion as LastTimePlayed, and that 0 ("never") maps
+// to the zero time.
+func TestReadTracksDateAdded(t *testing.T) {
+	src := openFixture(t)
+	tracks, err := src.ReadTracks(`:\My Music`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2", len(tracks))
+	}
+	if want := FromMMDate(41600); !tracks[0].DateAdded.Equal(want) {
+		t.Errorf("tracks[0].DateAdded = %v, want %v", tracks[0].DateAdded, want)
+	}
+	if !tracks[1].DateAdded.IsZero() {
+		t.Errorf("tracks[1].DateAdded = %v, want zero time", tracks[1].DateAdded)
+	}
 }
 
 func TestReadPlays(t *testing.T) {

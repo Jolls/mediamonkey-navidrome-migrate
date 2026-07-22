@@ -1,7 +1,8 @@
 // Package nav reads Navidrome's database for matching and performs the direct
-// annotation writes the Subsonic API cannot express (exact play counts and
-// backdated last-played). All direct writes use SET semantics (overwrite, never
-// add) so re-running a scope is idempotent.
+// writes the Subsonic API cannot express: exact play counts and backdated
+// last-played (annotation), and backdated date-added (media_file.created_at).
+// All direct writes use SET semantics (overwrite, never add) so re-running a
+// scope is idempotent.
 package nav
 
 import (
@@ -41,7 +42,20 @@ type Reader interface {
 	// library-relative media_file.path (no external root needed).
 	ReadTracks() ([]model.NavTrack, error)
 	Users() ([]User, error)
+	// ReadState returns each media_file's currently-stored rating/play-count/
+	// play-date (for userID) and created_at, keyed by media_file.id — for
+	// verifying what Commit would write against what's actually there.
+	ReadState(userID string) (map[string]NavState, error)
 	Close() error
+}
+
+// NavState is a track's currently-stored Navidrome values, as read back by
+// ReadState.
+type NavState struct {
+	Rating    int
+	PlayCount int
+	PlayDate  time.Time // zero if NULL
+	CreatedAt time.Time // zero if NULL or unparsable
 }
 
 // AnnotationWriter performs the direct, idempotent play-count/date writes.
@@ -49,6 +63,8 @@ type AnnotationWriter interface {
 	// SetAnnotation upserts the annotation row for (userID, a.NavID), setting
 	// play_count and play_date to the given values (overwrite, never add).
 	SetAnnotation(userID string, a Annotation) error
+	// SetCreatedAt overwrites media_file.created_at for navID.
+	SetCreatedAt(navID string, t time.Time) error
 	Close() error
 }
 
@@ -96,6 +112,47 @@ func (r *sqliteReader) ReadTracks() ([]model.NavTrack, error) {
 		})
 	}
 	return tracks, rows.Err()
+}
+
+// ReadState reads each media_file's currently-stored state, left-joining
+// annotation for userID so tracks with no annotation row yet still appear
+// (with zero rating/play_count/play_date).
+func (r *sqliteReader) ReadState(userID string) (map[string]NavState, error) {
+	rows, err := r.db.Query(`
+		SELECT m.id, m.created_at, COALESCE(a.rating, 0), COALESCE(a.play_count, 0), a.play_date
+		FROM media_file m
+		LEFT JOIN annotation a ON a.item_id = m.id AND a.item_type = 'media_file' AND a.user_id = ?
+		WHERE COALESCE(m.missing, 0) = 0
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]NavState)
+	for rows.Next() {
+		var (
+			id        string
+			createdAt string
+			rating    int
+			playCount int
+			playDate  sql.NullString
+		)
+		if err := rows.Scan(&id, &createdAt, &rating, &playCount, &playDate); err != nil {
+			return nil, err
+		}
+		st := NavState{Rating: rating, PlayCount: playCount}
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			st.CreatedAt = t
+		}
+		if playDate.Valid {
+			if t, err := time.Parse(time.RFC3339Nano, playDate.String); err == nil {
+				st.PlayDate = t
+			}
+		}
+		out[id] = st
+	}
+	return out, rows.Err()
 }
 
 func (r *sqliteReader) Users() ([]User, error) {
@@ -166,6 +223,20 @@ func (w *sqliteWriter) SetAnnotation(userID string, a Annotation) error {
 		ON CONFLICT(user_id, item_id, item_type)
 		DO UPDATE SET play_count=excluded.play_count, play_date=excluded.play_date
 	`, userID, a.NavID, a.PlayCount, playDate)
+	return err
+}
+
+// SetCreatedAt overwrites media_file.created_at for navID. A zero t is a no-op
+// — MM's DateAdded is unknown/never, and media_file.created_at is NOT NULL so
+// there's nothing sensible to write.
+func (w *sqliteWriter) SetCreatedAt(navID string, t time.Time) error {
+	if t.IsZero() {
+		return nil
+	}
+	// See the comment in SetAnnotation: same TDateTime-sourced ambiguity, same
+	// local-time reinterpretation to avoid sqlite's "Z" canonicalization.
+	local := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.Local)
+	_, err := w.db.Exec(`UPDATE media_file SET created_at = ? WHERE id = ?`, local.Format(navTimeFormat), navID)
 	return err
 }
 

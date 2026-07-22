@@ -49,6 +49,7 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/users", s.handleUsers)
 	mux.HandleFunc("GET /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/dry-run", s.handleDryRun)
+	mux.HandleFunc("GET /api/verify", s.handleVerify)
 	mux.HandleFunc("POST /api/commit", s.handleCommit)
 	mux.HandleFunc("GET /api/browse-file", s.handleBrowseFile)
 	mux.HandleFunc("POST /api/quit", s.handleQuit)
@@ -79,9 +80,9 @@ type configRequest struct {
 	Password      string   `json:"password"`
 	MMRoot        string   `json:"musicRoot"`
 	UserID        string   `json:"userId"`
-	Fields        []string `json:"fields"` // any of "rating", "playCount", "starred"
+	Fields        []string `json:"fields"`        // any of "rating", "playCount", "starred", "dateAdded"
 	StarThreshold int      `json:"starThreshold"` // 0-5; 0 means "use the default"
-	RatingMap     [11]int  `json:"ratingMap"`      // MM rating step (0=unrated, 1-10=half-star) -> Navidrome rating 0-5
+	RatingMap     [11]int  `json:"ratingMap"`     // MM rating step (0=unrated, 1-10=half-star) -> Navidrome rating 0-5
 }
 
 // ratingMapFromInts converts and clamps the UI-supplied rating map into
@@ -110,6 +111,8 @@ func fieldsFromNames(names []string) (model.Fields, error) {
 			f |= model.Fields(model.FieldPlayCount)
 		case "starred":
 			f |= model.Fields(model.FieldStarred)
+		case "dateAdded":
+			f |= model.Fields(model.FieldDateAdded)
 		default:
 			return 0, fmt.Errorf("unknown field %q", n)
 		}
@@ -264,6 +267,24 @@ func (s *apiServer) handleDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("dry-run: matched=%d ambiguous=%d unmatched=%d changes=%d", rep.Matched, rep.Ambiguous, rep.Unmatched, len(rep.Changes))
+	writeJSON(w, http.StatusOK, rep)
+}
+
+func (s *apiServer) handleVerify(w http.ResponseWriter, r *http.Request) {
+	p, err := s.readOnlyPipeline()
+	if err != nil {
+		writeError(w, http.StatusPreconditionRequired, err)
+		return
+	}
+	scope := scopeFromQuery(r)
+	log.Printf("verify: scope dir=%q", scope.Dir)
+	rep, err := p.Verify(scope)
+	if err != nil {
+		log.Printf("verify: %v", err)
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	log.Printf("verify: checked=%d mismatched=%d", rep.Checked, rep.Mismatched)
 	writeJSON(w, http.StatusOK, rep)
 }
 
