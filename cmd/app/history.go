@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jolls/mm5-navidrome-migrate/internal/listenbrainz"
+	"github.com/jolls/mm5-navidrome-migrate/internal/maloja"
 	"github.com/jolls/mm5-navidrome-migrate/internal/mm"
 	"github.com/jolls/mm5-navidrome-migrate/internal/model"
 )
@@ -24,6 +25,8 @@ const defaultPlaysLimit = 200
 type historyOpenRequest struct {
 	MMDBPath          string `json:"mmDbPath"`
 	ListenBrainzToken string `json:"listenBrainzToken"`
+	MalojaURL         string `json:"malojaUrl"`
+	MalojaAPIKey      string `json:"malojaApiKey"`
 }
 
 func (s *apiServer) handleHistoryOpen(w http.ResponseWriter, r *http.Request) {
@@ -56,10 +59,21 @@ func (s *apiServer) handleHistoryOpen(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("load ListenBrainz submission state: %w", err))
 		return
 	}
+	mjState, err := maloja.LoadStore(maloja.StorePath(req.MMDBPath))
+	if err != nil {
+		log.Printf("history: load submitted-scrobbles state failed: %v", err)
+		source.Close()
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("load Maloja submission state: %w", err))
+		return
+	}
 
 	var lb *listenbrainz.Client
 	if req.ListenBrainzToken != "" {
 		lb = listenbrainz.New(req.ListenBrainzToken)
+	}
+	var mj *maloja.Client
+	if req.MalojaURL != "" && req.MalojaAPIKey != "" {
+		mj = maloja.New(req.MalojaURL, req.MalojaAPIKey)
 	}
 
 	s.mu.Lock()
@@ -71,17 +85,20 @@ func (s *apiServer) handleHistoryOpen(w http.ResponseWriter, r *http.Request) {
 	s.historyOpen = true
 	s.lbClient = lb
 	s.lbState = lbState
+	s.mjClient = mj
+	s.mjState = mjState
 	s.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "total": len(plays)})
 }
 
-// playRow is one row of GET /api/history/plays, adding the submitted status
-// that model.Play itself doesn't carry (a ListenBrainz/display concern, not
-// a MediaMonkey domain field).
+// playRow is one row of GET /api/history/plays, adding the per-exporter
+// submitted status that model.Play itself doesn't carry (a display concern,
+// not a MediaMonkey domain field).
 type playRow struct {
 	model.Play
-	Submitted bool `json:"Submitted"`
+	SubmittedLB     bool `json:"SubmittedLB"`
+	SubmittedMaloja bool `json:"SubmittedMaloja"`
 }
 
 // playsResponse is the JSON body for GET /api/history/plays.
@@ -92,7 +109,7 @@ type playsResponse struct {
 
 func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	open, plays, lbState := s.historyOpen, s.historyPlays, s.lbState
+	open, plays, lbState, mjState := s.historyOpen, s.historyPlays, s.lbState, s.mjState
 	s.mu.Unlock()
 	if !open {
 		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
@@ -100,12 +117,16 @@ func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	unsubmittedOnly := r.URL.Query().Get("unsubmitted") == "true"
+	hideLB := r.URL.Query().Get("unsubmitted") == "true"
+	hideMaloja := r.URL.Query().Get("unsubmittedMaloja") == "true"
 	filtered := plays
-	if q != "" || unsubmittedOnly {
+	if q != "" || hideLB || hideMaloja {
 		filtered = make([]model.Play, 0, len(plays))
 		for _, p := range plays {
-			if unsubmittedOnly && lbState != nil && lbState.Has(p.ID) {
+			if hideLB && lbState != nil && lbState.Has(p.ID) {
+				continue
+			}
+			if hideMaloja && mjState != nil && mjState.Has(p.ID) {
 				continue
 			}
 			if q != "" && !(strings.Contains(strings.ToLower(p.Artist), q) ||
@@ -139,7 +160,11 @@ func (s *apiServer) handleHistoryPlays(w http.ResponseWriter, r *http.Request) {
 	page := filtered[offset:end]
 	rows := make([]playRow, len(page))
 	for i, p := range page {
-		rows[i] = playRow{Play: p, Submitted: lbState != nil && lbState.Has(p.ID)}
+		rows[i] = playRow{
+			Play:            p,
+			SubmittedLB:     lbState != nil && lbState.Has(p.ID),
+			SubmittedMaloja: mjState != nil && mjState.Has(p.ID),
+		}
 	}
 
 	writeJSON(w, http.StatusOK, playsResponse{Total: total, Rows: rows})
@@ -180,6 +205,46 @@ func playsToListens(plays []model.Play, alreadySubmitted *listenbrainz.Submitted
 		})
 		pending.IDs = append(pending.IDs, p.ID)
 		if limit > 0 && len(pending.Listens) >= limit {
+			break
+		}
+	}
+	return pending
+}
+
+// pendingScrobbles is the Maloja counterpart to pendingListens.
+type pendingScrobbles struct {
+	Scrobbles []maloja.Scrobble
+	IDs       []int64
+}
+
+// playsToScrobbles is the Maloja counterpart to playsToListens, sharing the
+// same filter rules (real timestamp, non-empty artist/title, not already
+// submitted) so the count a user previews matches what's actually sent.
+func playsToScrobbles(plays []model.Play, alreadySubmitted *maloja.SubmittedStore, limit int) pendingScrobbles {
+	pending := pendingScrobbles{
+		Scrobbles: make([]maloja.Scrobble, 0, len(plays)),
+		IDs:       make([]int64, 0, len(plays)),
+	}
+	for _, p := range plays {
+		if p.PlayedAt.IsZero() || p.Artist == "" || p.Title == "" {
+			continue
+		}
+		if alreadySubmitted != nil && alreadySubmitted.Has(p.ID) {
+			continue
+		}
+		s := maloja.Scrobble{
+			Time:    p.PlayedAt.Unix(),
+			Artists: []string{p.Artist},
+			Title:   p.Title,
+			Album:   p.Album,
+			Length:  p.Duration,
+		}
+		if p.AlbumArtist != "" {
+			s.AlbumArtists = []string{p.AlbumArtist}
+		}
+		pending.Scrobbles = append(pending.Scrobbles, s)
+		pending.IDs = append(pending.IDs, p.ID)
+		if limit > 0 && len(pending.Scrobbles) >= limit {
 			break
 		}
 	}
@@ -281,4 +346,96 @@ func (s *apiServer) handleListenBrainzSubmit(w http.ResponseWriter, r *http.Requ
 	}
 	log.Printf("listenbrainz: submitted %d listen(s) in %d batch(es)", res.Submitted, res.Batches)
 	writeJSON(w, http.StatusOK, listenBrainzSubmitResponse{Submitted: res.Submitted, Batches: res.Batches})
+}
+
+// malojaPreviewResponse is the JSON body for GET /api/history/maloja/preview.
+type malojaPreviewResponse struct {
+	Count            int    `json:"count"`
+	AlreadySubmitted int    `json:"alreadySubmitted"`
+	Earliest         string `json:"earliest,omitempty"`
+	Latest           string `json:"latest,omitempty"`
+}
+
+func (s *apiServer) handleMalojaPreview(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	open, mj, mjState, plays := s.historyOpen, s.mjClient, s.mjState, s.historyPlays
+	s.mu.Unlock()
+	if !open {
+		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
+		return
+	}
+	if mj == nil {
+		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no Maloja server/API key configured"))
+		return
+	}
+
+	pending := playsToScrobbles(plays, mjState, 0)
+	all := playsToScrobbles(plays, nil, 0)
+	resp := malojaPreviewResponse{
+		Count:            len(pending.Scrobbles),
+		AlreadySubmitted: len(all.Scrobbles) - len(pending.Scrobbles),
+	}
+	if len(pending.Scrobbles) > 0 {
+		// pending.Scrobbles is derived from plays, which ReadPlays sorts newest
+		// first by real UTC instant: [0] is latest, last is earliest.
+		resp.Latest = time.Unix(pending.Scrobbles[0].Time, 0).UTC().Format("2006-01-02T15:04:05Z")
+		resp.Earliest = time.Unix(pending.Scrobbles[len(pending.Scrobbles)-1].Time, 0).UTC().Format("2006-01-02T15:04:05Z")
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// malojaSubmitResponse is the JSON body for POST /api/history/maloja/submit.
+type malojaSubmitResponse struct {
+	Submitted  int      `json:"submitted"`
+	Duplicates int      `json:"duplicates,omitempty"`
+	Errors     []string `json:"errors,omitempty"`
+}
+
+func (s *apiServer) handleMalojaSubmit(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	open, mj, mjState, plays := s.historyOpen, s.mjClient, s.mjState, s.historyPlays
+	s.mu.Unlock()
+	if !open {
+		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no play history loaded: POST /api/history/open first"))
+		return
+	}
+	if mj == nil {
+		writeError(w, http.StatusPreconditionRequired, fmt.Errorf("no Maloja server/API key configured"))
+		return
+	}
+
+	limit := intQuery(r, "limit", 0)
+	pending := playsToScrobbles(plays, mjState, limit)
+
+	// progress reports the cumulative count of scrobbles handled so far
+	// (submitted or skipped as duplicates), in submission order — since
+	// pending.IDs is built in the same order as pending.Scrobbles, ids[:done]
+	// are exactly the plays settled so far. Persisted incrementally so a
+	// failure partway through a large submit doesn't lose credit for
+	// scrobbles that did succeed.
+	progress := func(done, total int) {
+		if err := mjState.MarkSubmitted(pending.IDs[:done]); err != nil {
+			log.Printf("maloja: failed to persist submitted-scrobbles state: %v", err)
+		}
+	}
+	// onDuplicate logs scrobbles Maloja already had recorded at that
+	// timestamp (HTTP 409 duplicate_timestamp) — not a failure, so these are
+	// still marked submitted via progress above rather than retried.
+	onDuplicate := func(s maloja.Scrobble) {
+		log.Printf("maloja: skipping duplicate already registered at Maloja: %s - %q (time=%d)", strings.Join(s.Artists, ", "), s.Title, s.Time)
+	}
+
+	log.Printf("maloja: submitting %d scrobble(s)", len(pending.Scrobbles))
+	res, err := mj.SubmitAll(pending.Scrobbles, progress, onDuplicate)
+	if err != nil {
+		log.Printf("maloja: submit failed after %d applied (%d duplicates skipped): %v", res.Submitted, res.Duplicates, err)
+		writeJSON(w, http.StatusBadGateway, malojaSubmitResponse{
+			Submitted:  res.Submitted,
+			Duplicates: res.Duplicates,
+			Errors:     []string{err.Error()},
+		})
+		return
+	}
+	log.Printf("maloja: submitted %d scrobble(s), %d duplicate(s) skipped", res.Submitted, res.Duplicates)
+	writeJSON(w, http.StatusOK, malojaSubmitResponse{Submitted: res.Submitted, Duplicates: res.Duplicates})
 }

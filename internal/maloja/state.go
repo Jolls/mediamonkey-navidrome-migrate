@@ -1,4 +1,4 @@
-package listenbrainz
+package maloja
 
 import (
 	"encoding/json"
@@ -7,9 +7,9 @@ import (
 )
 
 // SubmittedStore tracks which MM Played.IDPlayed rows have already been
-// confirmed submitted to ListenBrainz, persisted as a sidecar JSON file next
-// to MM5.DB (mirrors internal/nav.Backup's sibling-file convention, rather
-// than writing anything back into MM5.DB itself).
+// confirmed submitted to Maloja, persisted as a sidecar JSON file next to
+// MM5.DB (mirrors internal/listenbrainz.SubmittedStore's sidecar convention,
+// kept as its own independent store rather than shared with ListenBrainz's).
 type SubmittedStore struct {
 	path string
 	ids  map[int64]bool
@@ -17,7 +17,7 @@ type SubmittedStore struct {
 
 // StorePath derives the sidecar path for a given MM5.DB path.
 func StorePath(mmDBPath string) string {
-	return mmDBPath + ".listenbrainz-submitted.json"
+	return mmDBPath + ".maloja-submitted.json"
 }
 
 type submittedFile struct {

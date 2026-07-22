@@ -92,11 +92,12 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 }
 
 // ReadPlays returns every Played row, newest first by real UTC instant,
-// joined to its song's display metadata (Songs has Artist/SongTitle/Album
-// directly — no join to Artists/ArtistsSongs needed).
+// joined to its song's display metadata (Songs has Artist/AlbumArtist/
+// SongTitle/Album/SongLength directly — no join to Artists/ArtistsSongs
+// needed).
 func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
 	rows, err := s.db.Query(`
-		SELECT p.IDPlayed, p.IDSong, s.SongPath, s.Artist, s.SongTitle, s.Album, p.PlayDate
+		SELECT p.IDPlayed, p.IDSong, s.SongPath, s.Artist, s.AlbumArtist, s.SongTitle, s.Album, s.SongLength, p.PlayDate
 		FROM Played p JOIN Songs s ON s.ID = p.IDSong
 		ORDER BY p.PlayDate DESC
 	`)
@@ -108,28 +109,32 @@ func (s *sqliteSource) ReadPlays() ([]model.Play, error) {
 	var plays []model.Play
 	for rows.Next() {
 		var (
-			idPlayed int64
-			songID   int64
-			songPath sql.NullString
-			artist   sql.NullString
-			title    sql.NullString
-			album    sql.NullString
-			playDate float64
+			idPlayed    int64
+			songID      int64
+			songPath    sql.NullString
+			artist      sql.NullString
+			albumArtist sql.NullString
+			title       sql.NullString
+			album       sql.NullString
+			songLength  sql.NullInt64 // milliseconds
+			playDate    float64
 		)
-		if err := rows.Scan(&idPlayed, &songID, &songPath, &artist, &title, &album, &playDate); err != nil {
+		if err := rows.Scan(&idPlayed, &songID, &songPath, &artist, &albumArtist, &title, &album, &songLength, &playDate); err != nil {
 			return nil, err
 		}
 		if !songPath.Valid {
 			continue
 		}
 		plays = append(plays, model.Play{
-			ID:       idPlayed,
-			SongID:   songID,
-			Path:     songPath.String,
-			Artist:   artist.String,
-			Title:    title.String,
-			Album:    album.String,
-			PlayedAt: FromMMPlayDate(playDate),
+			ID:          idPlayed,
+			SongID:      songID,
+			Path:        songPath.String,
+			Artist:      artist.String,
+			AlbumArtist: albumArtist.String,
+			Title:       title.String,
+			Album:       album.String,
+			Duration:    int(songLength.Int64 / 1000),
+			PlayedAt:    FromMMPlayDate(playDate),
 		})
 	}
 	return plays, rows.Err()

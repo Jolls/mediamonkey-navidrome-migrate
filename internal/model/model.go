@@ -20,16 +20,18 @@ type Track struct {
 }
 
 // Play is one MediaMonkey play-history entry (from the Played table),
-// denormalized for display and ListenBrainz export. Independent of the
+// denormalized for display and ListenBrainz/Maloja export. Independent of the
 // Navidrome matching pipeline — Path is raw and unnormalized, for display only.
 type Play struct {
-	ID       int64 // MM Played.IDPlayed — stable identity for ListenBrainz submission tracking
-	SongID   int64
-	Path     string // raw MM SongPath, display only
-	Artist   string
-	Title    string
-	Album    string
-	PlayedAt time.Time // real UTC instant: see mm.FromMMPlayDate
+	ID          int64 // MM Played.IDPlayed — stable identity for ListenBrainz/Maloja submission tracking
+	SongID      int64
+	Path        string // raw MM SongPath, display only
+	Artist      string
+	AlbumArtist string // MM Songs.AlbumArtist; "" when absent
+	Title       string
+	Album       string
+	Duration    int       // MM Songs.SongLength in whole seconds; 0 when absent
+	PlayedAt    time.Time // real UTC instant: see mm.FromMMPlayDate
 }
 
 // NavTrack is a Navidrome media_file, reduced to what matching needs.

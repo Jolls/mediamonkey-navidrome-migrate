@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-07-21
+
+### Added
+- Maloja export from the Play History panel: a second, independent
+  preview/submit flow (server URL + API key) alongside the existing
+  ListenBrainz backfill, with its own submitted-state sidecar file.
+- Maloja scrobbles now include album artist and track length (from
+  MediaMonkey's `AlbumArtist`/`SongLength`), matching what a live scrobbler
+  sends and avoiding a Maloja-side bug triggered by scrobbles missing them.
+- Per-service "Submitted" columns (LB / Maloja) and independent "Hide
+  already submitted" filters in the Play History table, instead of one
+  ListenBrainz-only column/filter.
+
+### Fixed
+- A Maloja "duplicate timestamp" response (HTTP 409) no longer aborts the
+  rest of a submit batch — it's now recorded as already-submitted and
+  skipped, with the rest of the batch continuing.
+- `SubmittedStore.MarkSubmitted` (both ListenBrainz and Maloja) now retries
+  its atomic rename briefly, to ride out a transient Windows
+  antivirus/indexer lock on the just-written sidecar file.
+
 ## [0.1.9] - 2026-07-21
 
 ### Added
