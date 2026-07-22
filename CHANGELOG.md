@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-07-22
+
+### Added
+- `Songs.DateAdded` migration to `media_file.created_at`, via a new "Date
+  added" field checkbox: direct SQLite write (no Subsonic API surface for
+  this field), converted from MM's `TDateTime` format like `LastTimePlayed`.
+- "Verify" button on the dry-run review step: compares MediaMonkey's Rating,
+  Play count, Last played, and Date added against what's actually stored in
+  navidrome.db right now, independent of which fields are currently checked
+  and usable before or after a commit — surfaces tracks a previous commit
+  missed or that got reset by a Navidrome rescan.
+
 ## [0.1.11] - 2026-07-22
 
 ### Fixed

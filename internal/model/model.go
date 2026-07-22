@@ -16,6 +16,7 @@ type Track struct {
 	RatingStep int       // MM rating as a 0-10 half-star step (0 = unrated); see Config.MapRating
 	PlayCount  int       // MM PlayCounter
 	LastPlayed time.Time // zero value means never played
+	DateAdded  time.Time // MM DateAdded; zero value means unknown
 	MBID       string    // MusicBrainz recording id; "" when absent
 }
 
@@ -66,6 +67,7 @@ const (
 	FieldRating    Field = 1 << iota
 	FieldPlayCount       // includes LastPlayed
 	FieldStarred
+	FieldDateAdded
 )
 
 // Fields is a bitset of Field values.
@@ -90,7 +92,7 @@ type Config struct {
 	MMRoot    string // absolute root MM's SongPaths live under, on this machine.
 	// Navidrome needs no root here: media_file.path is already library-relative.
 	UserID string // Navidrome user that owns the annotations
-	Fields    Fields
+	Fields Fields
 
 	// StarThreshold is the minimum mapped Navidrome rating (0-5) treated as
 	// "starred" when FieldStarred is set. MM has no true favorite flag, so
@@ -130,6 +132,7 @@ type Change struct {
 	PlayCount  *int
 	LastPlayed *time.Time
 	Starred    *bool
+	DateAdded  *time.Time
 }
 
 // UnresolvedTrack is one track that didn't cleanly match, shown in the dry-run
@@ -151,6 +154,41 @@ type DryRunReport struct {
 type CommitResult struct {
 	Applied int
 	Errors  []CommitError
+}
+
+// VerifyRow compares what MediaMonkey says a matched track's fields should be
+// against what's actually stored in navidrome.db right now. Only fields
+// migrate.go's Commit can write are checked (not Starred, which is a boolean
+// derived from Rating).
+type VerifyRow struct {
+	RelPath string
+	NavID   string
+
+	ExpectedRating, ActualRating int
+	RatingMatch                  bool
+
+	ExpectedPlayCount, ActualPlayCount int
+	PlayCountMatch                     bool
+
+	// nil means "never played" / no play_date.
+	ExpectedLastPlayed, ActualLastPlayed *time.Time
+	LastPlayedMatch                      bool
+
+	// DateAddedChecked is false when MM's DateAdded is unknown (zero) — Commit
+	// leaves media_file.created_at untouched in that case, so there's nothing
+	// to verify. Expected/ActualDateAdded are nil in that case too.
+	DateAddedChecked                   bool
+	ExpectedDateAdded, ActualDateAdded *time.Time
+	DateAddedMatch                     bool
+}
+
+// VerifyReport summarizes a comparison of MediaMonkey's data against
+// navidrome.db's current state. Rows lists only mismatched tracks.
+type VerifyReport struct {
+	Scope      Scope
+	Checked    int
+	Mismatched int
+	Rows       []VerifyRow
 }
 
 // CommitError records a single failed write.

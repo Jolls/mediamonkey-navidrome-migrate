@@ -11,7 +11,7 @@ Tracks are matched between the two databases by relative file path or MusicBrain
 | `Songs.Rating` (mapped, see above) | `annotation.starred` / `starred_at` | MM has no native favorite flag; a track is starred if its mapped rating meets the configurable star threshold (default 5 stars). Written via the Subsonic API. |
 | `Songs.PlayCounter` | `annotation.play_count` | Direct SQLite upsert; overwrites rather than adds. |
 | `Songs.LastTimePlayed` | `annotation.play_date` | Converted from MM's `TDateTime` format to Navidrome's timestamp format; unplayed tracks are left NULL. |
-| `Songs.DateAdded` | *(not implemented)* | Navidrome tracks this as `media_file.created_at`, but it's set by Navidrome's own file scanner and isn't writable via the Subsonic API or direct migration — feature not yet implemented. |
+| `Songs.DateAdded` | `media_file.created_at` | Converted from MM's `TDateTime` format, like `LastTimePlayed`. Direct SQLite write — there's no Subsonic API for this field. Relies on Navidrome's scanner only setting `created_at` once, on a file's first scan, and never touching it again on rescans; not independently verified against Navidrome's own source. |
 | `Songs.SkipCount` / `Songs.LastTimeSkipped` | *(not migratable)* | Navidrome has no skip-count concept anywhere in its schema — nothing to write this into. |
 | `Played` table (per-play history log) | *(not migratable into Navidrome — see below)* | Navidrome's `annotation.play_date` only stores the single most recent play time, not full history, so there's nowhere in navidrome.db to migrate this data to. It can be backfilled into ListenBrainz instead — see "Play History & ListenBrainz" below. |
 
@@ -20,6 +20,8 @@ Album ratings are not migrated directly — Navidrome has no per-album annotatio
 Not migrated: MM playlists. Navidrome has no skip-count field to migrate into.
 
 This migration is idempotent — running it multiple times against the same data produces the same result, so it's safe to re-run.
+
+The dry-run review step has a **Verify** button that compares MediaMonkey's values for Rating, Play count, Last played, and Date added against what's actually stored in navidrome.db right now — independent of the checked fields above and usable before or after a commit. Useful for spot-checking a commit that ran, or for finding tracks a previous commit silently missed (e.g. a match that resolved to the wrong/missing `media_file` row).
 
 ## Before migrating
 

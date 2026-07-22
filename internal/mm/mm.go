@@ -49,7 +49,7 @@ func Open(path string) (Source, error) {
 func (s *sqliteSource) Close() error { return s.db.Close() }
 
 func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
-	rows, err := s.db.Query(`SELECT SongPath, Rating, PlayCounter, LastTimePlayed FROM Songs`)
+	rows, err := s.db.Query(`SELECT SongPath, Rating, PlayCounter, LastTimePlayed, DateAdded FROM Songs`)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +62,9 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 			rating     sql.NullInt64
 			playCount  int
 			lastPlayed float64
+			dateAdded  float64
 		)
-		if err := rows.Scan(&songPath, &rating, &playCount, &lastPlayed); err != nil {
+		if err := rows.Scan(&songPath, &rating, &playCount, &lastPlayed, &dateAdded); err != nil {
 			return nil, err
 		}
 		if !songPath.Valid {
@@ -86,6 +87,7 @@ func (s *sqliteSource) ReadTracks(root string) ([]model.Track, error) {
 			RatingStep: ToRatingStep(mmRating),
 			PlayCount:  playCount,
 			LastPlayed: FromMMDate(lastPlayed),
+			DateAdded:  FromMMDate(dateAdded),
 		})
 	}
 	return tracks, rows.Err()

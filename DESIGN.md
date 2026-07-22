@@ -17,6 +17,7 @@
 | Rating | **Subsonic API** `setRating` | MM 0–100 → 0-10 half-star step (`mm.ToRatingStep`) → 0–5 via user-configurable `Config.RatingMap` (UI presets: round down/up, or a custom per-step table) |
 | Favorite / starred | **Subsonic API** `star` (optional, off by default) | MM has no true "favorite"; opt-in mapping |
 | Play count + last-played | **Direct write** to `annotation` | API `scrobble` can't set exact counts or backdate — unavoidable. **Set (overwrite), never add** → keeps re-runs idempotent |
+| Date added | **Direct write** to `media_file.created_at` | No Subsonic API surface for this field. Relies on Navidrome's scanner setting `created_at` once on first insert and never touching it again on rescans. |
 | Playlists | Phase 2 | Native `.m3u` auto-import already covers this |
 
 ## 4. Track matching
