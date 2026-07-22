@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/jolls/mm5-navidrome-migrate/internal/listenbrainz"
+	"github.com/jolls/mm5-navidrome-migrate/internal/maloja"
 	"github.com/jolls/mm5-navidrome-migrate/internal/migrate"
 	"github.com/jolls/mm5-navidrome-migrate/internal/mm"
 	"github.com/jolls/mm5-navidrome-migrate/internal/model"
@@ -35,6 +36,8 @@ type apiServer struct {
 	historyPlays  []model.Play // cached on open; ~28k rows is trivial in memory
 	lbClient      *listenbrainz.Client
 	lbState       *listenbrainz.SubmittedStore
+	mjClient      *maloja.Client
+	mjState       *maloja.SubmittedStore
 }
 
 func newAPIServer() *apiServer {
@@ -54,6 +57,8 @@ func (s *apiServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/history/plays", s.handleHistoryPlays)
 	mux.HandleFunc("GET /api/history/listenbrainz/preview", s.handleListenBrainzPreview)
 	mux.HandleFunc("POST /api/history/listenbrainz/submit", s.handleListenBrainzSubmit)
+	mux.HandleFunc("GET /api/history/maloja/preview", s.handleMalojaPreview)
+	mux.HandleFunc("POST /api/history/maloja/submit", s.handleMalojaSubmit)
 }
 
 // handleQuit responds then terminates the process, letting the user close

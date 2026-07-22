@@ -278,8 +278,10 @@ $("commit-btn").addEventListener("click", async () => {
 
 const historyState = {
   hasToken: false,
+  hasMaloja: false,
   query: "",
   hideSubmitted: false,
+  hideSubmittedMaloja: false,
   offset: 0,
   limit: 200,
 };
@@ -301,17 +303,25 @@ $("history-open-form").addEventListener("submit", async (e) => {
   hideError($("history-open-error"));
   const fd = new FormData(e.target);
   const token = fd.get("listenBrainzToken") || "";
+  const malojaUrl = fd.get("malojaUrl") || "";
+  const malojaApiKey = fd.get("malojaApiKey") || "";
   try {
     const res = await api("POST", "/api/history/open", {
       mmDbPath: fd.get("historyMmDbPath") || "",
       listenBrainzToken: token,
+      malojaUrl: malojaUrl,
+      malojaApiKey: malojaApiKey,
     });
     historyState.hasToken = Boolean(token);
+    historyState.hasMaloja = Boolean(malojaUrl && malojaApiKey);
     historyState.offset = 0;
     $("history-table-section").hidden = false;
     $("history-lb-section").hidden = !historyState.hasToken;
     $("history-lb-preview").textContent = "";
     $("history-lb-result").textContent = "";
+    $("history-mj-section").hidden = !historyState.hasMaloja;
+    $("history-mj-preview").textContent = "";
+    $("history-mj-result").textContent = "";
     await loadHistoryPage();
   } catch (err) {
     showError($("history-open-error"), err);
@@ -330,6 +340,12 @@ $("history-search").addEventListener("input", () => {
 
 $("history-hide-submitted").addEventListener("change", () => {
   historyState.hideSubmitted = $("history-hide-submitted").checked;
+  historyState.offset = 0;
+  loadHistoryPage();
+});
+
+$("history-hide-submitted-maloja").addEventListener("change", () => {
+  historyState.hideSubmittedMaloja = $("history-hide-submitted-maloja").checked;
   historyState.offset = 0;
   loadHistoryPage();
 });
@@ -359,6 +375,7 @@ async function loadHistoryPage() {
       offset: String(requestOffset),
     });
     if (historyState.hideSubmitted) params.set("unsubmitted", "true");
+    if (historyState.hideSubmittedMaloja) params.set("unsubmittedMaloja", "true");
     const res = await api("GET", `/api/history/plays?${params}`);
     if (seq !== historyRequestSeq) return; // a newer request has since superseded this one
     renderHistoryTable(res.total, res.rows || [], requestOffset);
@@ -380,7 +397,8 @@ function renderHistoryTable(total, rows, offset) {
       <td>${escapeHTML(p.Title)}</td>
       <td>${escapeHTML(p.Album)}</td>
       <td>${escapeHTML(p.Path)}</td>
-      <td>${p.Submitted ? "✓" : ""}</td>`;
+      <td>${p.SubmittedLB ? "✓" : ""}</td>
+      <td>${p.SubmittedMaloja ? "✓" : ""}</td>`;
     tbody.appendChild(tr);
   }
   const start = total === 0 ? 0 : offset + 1;
@@ -427,6 +445,44 @@ $("history-lb-test-btn").addEventListener("click", () => {
   submitListenBrainz(n);
 });
 $("history-lb-submit-btn").addEventListener("click", () => submitListenBrainz(0));
+
+$("history-mj-preview-btn").addEventListener("click", async () => {
+  hideError($("history-error"));
+  try {
+    const res = await api("GET", "/api/history/maloja/preview");
+    const range = res.count > 0 ? `${formatIsoDate(res.earliest)} – ${formatIsoDate(res.latest)}` : "";
+    $("history-mj-preview").innerHTML = `<div class="buckets"><span>${res.count} scrobble(s) to submit</span><span>Already submitted: ${res.alreadySubmitted}</span><span>${range}</span></div>`;
+  } catch (err) {
+    showError($("history-error"), err);
+  }
+});
+
+async function submitMaloja(limit) {
+  hideError($("history-error"));
+  const preview = await api("GET", "/api/history/maloja/preview");
+  const count = limit ? Math.min(limit, preview.count) : preview.count;
+  const range = preview.count > 0 ? ` (${formatIsoDate(preview.earliest)} – ${formatIsoDate(preview.latest)})` : "";
+  const confirmed = window.confirm(`Submit ${count} scrobble(s) to Maloja?${limit ? " (test batch)" : range}`);
+  if (!confirmed) return;
+
+  $("history-mj-result").textContent = "Submitting… this may take a while for a large library.";
+  try {
+    const params = limit ? `?limit=${encodeURIComponent(limit)}` : "";
+    const res = await api("POST", `/api/history/maloja/submit${params}`);
+    const errCount = (res.errors || []).length;
+    $("history-mj-result").textContent =
+      `Submitted ${res.submitted} scrobble(s). ${res.duplicates || 0} already registered (skipped). ${errCount} error(s).`;
+  } catch (err) {
+    $("history-mj-result").textContent = "";
+    showError($("history-error"), err);
+  }
+}
+
+$("history-mj-test-btn").addEventListener("click", () => {
+  const n = Number($("history-mj-test-count").value) || 5;
+  submitMaloja(n);
+});
+$("history-mj-submit-btn").addEventListener("click", () => submitMaloja(0));
 
 // formatIsoDate renders a real UTC-instant ISO timestamp (unlike
 // formatNaiveDate above, Play.PlayedAt is a genuine UTC instant, so the

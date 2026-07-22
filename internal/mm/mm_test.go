@@ -36,13 +36,13 @@ func openFixture(t *testing.T) *sqliteSource {
 	t.Cleanup(func() { db.Close() })
 
 	if _, err := db.Exec(`
-		CREATE TABLE Songs (ID INTEGER PRIMARY KEY, SongPath TEXT, Artist TEXT, SongTitle TEXT, Album TEXT,
-			Rating INTEGER, PlayCounter INTEGER, LastTimePlayed REAL);
+		CREATE TABLE Songs (ID INTEGER PRIMARY KEY, SongPath TEXT, Artist TEXT, AlbumArtist TEXT, SongTitle TEXT, Album TEXT,
+			SongLength INTEGER, Rating INTEGER, PlayCounter INTEGER, LastTimePlayed REAL);
 		CREATE TABLE Played (IDPlayed INTEGER PRIMARY KEY, IDSong INTEGER, PlayDate REAL, UTCOffset REAL);
-		INSERT INTO Songs (ID, SongPath, Artist, SongTitle, Album, Rating, PlayCounter, LastTimePlayed)
-			VALUES (1, ':\My Music\a.mp3', 'Artist A', 'Title A', 'Album A', 80, 3, 41650);
-		INSERT INTO Songs (ID, SongPath, Artist, SongTitle, Album, Rating, PlayCounter, LastTimePlayed)
-			VALUES (2, ':\My Music\b.mp3', 'Artist B', 'Title B', 'Album B', -1, 0, 0);
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed)
+			VALUES (1, ':\My Music\a.mp3', 'Artist A', 'Artist A', 'Title A', 'Album A', 210000, 80, 3, 41650);
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album, SongLength, Rating, PlayCounter, LastTimePlayed)
+			VALUES (2, ':\My Music\b.mp3', 'Artist B', 'Artist B', 'Title B', 'Album B', 180000, -1, 0, 0);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (1, 41650.5, -0.333333333);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (1, 41651.5, -0.333333333);
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (2, 41652.5, 0);
@@ -81,10 +81,10 @@ func TestReadPlaysOrdersByRawPlayDateRegardlessOfUTCOffset(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	if _, err := db.Exec(`
-		CREATE TABLE Songs (ID INTEGER PRIMARY KEY, SongPath TEXT, Artist TEXT, SongTitle TEXT, Album TEXT);
+		CREATE TABLE Songs (ID INTEGER PRIMARY KEY, SongPath TEXT, Artist TEXT, AlbumArtist TEXT, SongTitle TEXT, Album TEXT, SongLength INTEGER);
 		CREATE TABLE Played (IDPlayed INTEGER PRIMARY KEY, IDSong INTEGER, PlayDate REAL, UTCOffset REAL);
-		INSERT INTO Songs (ID, SongPath, Artist, SongTitle, Album) VALUES (1, ':\My Music\earlier.mp3', 'A', 'Earlier', 'Alb');
-		INSERT INTO Songs (ID, SongPath, Artist, SongTitle, Album) VALUES (2, ':\My Music\later.mp3', 'B', 'Later', 'Alb');
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album) VALUES (1, ':\My Music\earlier.mp3', 'A', 'A', 'Earlier', 'Alb');
+		INSERT INTO Songs (ID, SongPath, Artist, AlbumArtist, SongTitle, Album) VALUES (2, ':\My Music\later.mp3', 'B', 'B', 'Later', 'Alb');
 		-- Song 1: earlier UTC instant, at a very different UTCOffset than song 2.
 		INSERT INTO Played (IDSong, PlayDate, UTCOffset) VALUES (1, 100.4, 0.5);
 		-- Song 2: later UTC instant, despite a very different UTCOffset than song 1.

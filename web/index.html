@@ -113,6 +113,12 @@
           <label>ListenBrainz user token (optional &mdash; only needed to submit listens)
             <input name="listenBrainzToken" type="password" placeholder="from listenbrainz.org/settings" />
           </label>
+          <label>Maloja server URL (optional &mdash; only needed to submit scrobbles)
+            <input name="malojaUrl" placeholder="http://localhost:42010" />
+          </label>
+          <label>Maloja API key (optional &mdash; only needed to submit scrobbles)
+            <input name="malojaApiKey" type="password" placeholder="from Maloja's admin API key page" />
+          </label>
           <button type="submit">Load</button>
         </form>
         <p id="history-open-error" class="error" hidden></p>
@@ -123,10 +129,11 @@
         <label>Search
           <input id="history-search" placeholder="artist, title, album, or path" />
         </label>
-        <label><input type="checkbox" id="history-hide-submitted" /> Hide already submitted</label>
+        <label><input type="checkbox" id="history-hide-submitted" /> Hide already submitted (LB)</label>
+        <label><input type="checkbox" id="history-hide-submitted-maloja" /> Hide already submitted (Maloja)</label>
         <table id="history-table">
           <thead>
-            <tr><th>ID</th><th>Played at</th><th>Artist</th><th>Title</th><th>Album</th><th>Path</th><th>Submitted</th></tr>
+            <tr><th>ID</th><th>Played at</th><th>Artist</th><th>Title</th><th>Album</th><th>Path</th><th>LB</th><th>Maloja</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -151,6 +158,22 @@
         </fieldset>
         <button id="history-lb-submit-btn" type="button">Submit all listens</button>
         <p id="history-lb-result"></p>
+      </section>
+
+      <section id="history-mj-section" class="step" hidden>
+        <h2>Submit to Maloja</h2>
+        <p>This is a one-time backfill of MediaMonkey's historical plays. Going forward, point your live scrobbler (e.g. multi-scrobbler) at the same Maloja server &mdash; this tool doesn't keep syncing new plays.</p>
+        <button id="history-mj-preview-btn" type="button">Preview</button>
+        <div id="history-mj-preview"></div>
+        <fieldset>
+          <legend>Small batch (safe to repeat &mdash; always sends the next unsubmitted plays, most recent first)</legend>
+          <label>Number of plays
+            <input id="history-mj-test-count" type="number" min="1" value="5" />
+          </label>
+          <button id="history-mj-test-btn" type="button">Submit next unsubmitted batch</button>
+        </fieldset>
+        <button id="history-mj-submit-btn" type="button">Submit all scrobbles</button>
+        <p id="history-mj-result"></p>
       </section>
 
       <p id="history-error" class="error" hidden></p>
