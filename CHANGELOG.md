@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-07-22
+
+### Fixed
+- Maloja submission no longer loses plays to false-positive "duplicate"
+  rejections: MediaMonkey's sub-second PlayDate precision was being
+  truncated to Maloja's whole-second timestamps, so two *different* songs
+  played less than a second apart could round to the same second — Maloja
+  dedups by timestamp alone, so the second song was silently discarded and
+  marked submitted. Colliding different-song timestamps are now nudged
+  apart before submission; genuine same-song duplicates are left colliding
+  so Maloja's own duplicate-timestamp response (already handled) catches
+  them correctly.
+
 ## [0.1.10] - 2026-07-21
 
 ### Added

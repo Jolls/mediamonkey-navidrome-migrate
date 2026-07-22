@@ -220,11 +220,24 @@ type pendingScrobbles struct {
 // playsToScrobbles is the Maloja counterpart to playsToListens, sharing the
 // same filter rules (real timestamp, non-empty artist/title, not already
 // submitted) so the count a user previews matches what's actually sent.
+//
+// MediaMonkey's PlayDate carries sub-second precision, but Maloja's API only
+// accepts whole-second timestamps, and Maloja dedups scrobbles by timestamp
+// alone — so two different songs played less than a second apart can round
+// to the same second and Maloja will reject the second one as a duplicate,
+// silently discarding a real, distinct play. secondsInUse resolves that by
+// nudging one second earlier whenever a different song would otherwise
+// collide with one already assigned in this batch. A genuine duplicate
+// (same song, same rounded second — MediaMonkey occasionally double-logs a
+// play) is deliberately left colliding: Maloja's own duplicate-timestamp
+// response for that case is what SubmitAll already treats as "already
+// recorded, skip it" (see maloja.IsDuplicateTimestamp).
 func playsToScrobbles(plays []model.Play, alreadySubmitted *maloja.SubmittedStore, limit int) pendingScrobbles {
 	pending := pendingScrobbles{
 		Scrobbles: make([]maloja.Scrobble, 0, len(plays)),
 		IDs:       make([]int64, 0, len(plays)),
 	}
+	secondsInUse := make(map[int64]int64) // unix second -> SongID that claimed it
 	for _, p := range plays {
 		if p.PlayedAt.IsZero() || p.Artist == "" || p.Title == "" {
 			continue
@@ -232,8 +245,17 @@ func playsToScrobbles(plays []model.Play, alreadySubmitted *maloja.SubmittedStor
 		if alreadySubmitted != nil && alreadySubmitted.Has(p.ID) {
 			continue
 		}
+		sec := p.PlayedAt.Unix()
+		for {
+			owner, taken := secondsInUse[sec]
+			if !taken || owner == p.SongID {
+				break
+			}
+			sec--
+		}
+		secondsInUse[sec] = p.SongID
 		s := maloja.Scrobble{
-			Time:    p.PlayedAt.Unix(),
+			Time:    sec,
 			Artists: []string{p.Artist},
 			Title:   p.Title,
 			Album:   p.Album,
